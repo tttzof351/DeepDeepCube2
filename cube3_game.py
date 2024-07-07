@@ -30,3 +30,6 @@ class Cube3Game:
 
     def is_goal(self, state):
         return np.array_equal(state, self.initial_state)
+    
+    def to_nn(self, state):
+        return (state / 9.0).astype(np.int32)
