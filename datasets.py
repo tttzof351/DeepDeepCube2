@@ -1,8 +1,11 @@
 import numpy as np
 import random
 from tqdm import tqdm
+import torch
+from numba import njit, jit
+
 from cube3_game import Cube3Game
-from utils import array_wyhash
+from utils import array_wyhash, str_hash
 
 def get_scramble(game, length: int): # return (state, action, length)
     scramble = []
@@ -32,7 +35,7 @@ def get_scramble(game, length: int): # return (state, action, length)
 if __name__ == "__main__":
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
     
-    for _ in tqdm(range(100_000)):
+    for _ in tqdm(range(10_000)):
         scramble = get_scramble(game, 1000)
 
     print(len(scramble))
