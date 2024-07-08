@@ -3,6 +3,7 @@ import numpy as np
 import random
 import wyhash
 from numba import njit
+import pickle
 
 sec = wyhash.make_secret(0)
 
@@ -20,6 +21,14 @@ def str_hash(array: np.array):
     for e in array:
         s += str(e) + ", "
     return hash(s)
+
+def open_pickle(path: str):
+    with open(path, "rb") as f:
+        return pickle.load(f)
+
+def save_pickle(data, path: str):
+    with open(path, "wb") as f:
+        pickle.dump(data, f)
 
 if __name__ == "__main__":
     set_seed(0)

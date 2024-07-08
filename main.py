@@ -1,4 +1,6 @@
 import os 
+import sys
+import time 
 
 import numpy as np
 import argparse
@@ -11,6 +13,8 @@ from sklearn.metrics import root_mean_squared_error
 from numba import njit
 
 from utils import array_wyhash, set_seed
+from utils import open_pickle, save_pickle
+
 from cube3_game import Cube3Game
 from datasets import get_scramble
 from hyperparams import hp
@@ -34,8 +38,7 @@ def generate_val_test():
         "values": values   
     }
 
-    with open("./assets/data/validation/val.pickle", "wb") as f:
-        pickle.dump(validation, f)
+    save_pickle(validation, "./assets/data/validation/val.pickle")
 
     set_seed(hp.test_seed)
     scrambles = []
@@ -53,14 +56,13 @@ def generate_val_test():
         "values": values
     }
 
-    with open("./assets/data/test/test.pickle", "wb") as f:
-        pickle.dump(test, f)
+    save_pickle(test, "./assets/data/test/test.pickle")
+
 
 def train_catboost():
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
 
-    with open("./assets/data/validation/val.pickle", "rb") as f:
-        validation = pickle.load(f)
+    validation = open_pickle("./assets/data/validation/val.pickle")
 
     val_states = validation['states'][:700]
     val_values = validation['values'][:700]
@@ -71,7 +73,7 @@ def train_catboost():
     set_seed(hp.train_seed)
     # for _ in range(10):
     scrambles = []
-    for _ in tqdm(range(1_000_000)):
+    for _ in tqdm(range(1_000_000)): # Each scamble contains 26 samples, so trainset 26M
         scramble = get_scramble(game, hp.cube3_god_number)
         scrambles += scramble
 
@@ -112,6 +114,65 @@ def train_catboost():
 
     # pass
 
+def test_deepcube():
+    sys.path.append("./cpp/build")
+    import cpp_a_star
+
+    game = Cube3Game("./assets/envs/qtm_cube3.pickle")
+    cpp_a_star.init_envs(game.actions)
+
+    deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
+    states = deepcube_test['states']
+    opt_solutions = deepcube_test['solutions']
+
+    report = {
+        "i": [],
+        "states": [],
+        "solutions": [],
+        "visit_nodes": [],
+        "h_values": [], 
+        "time_sec": []       
+    }
+
+    for i in tqdm(range(len(states))):
+        start = time.time()
+
+        state = states[i]
+        result = cpp_a_star.catboost_parallel_search_a(
+            state, # state
+            10_000_000, # limit size
+            True, # debug,
+            10, # parallel_size,
+            100000, # open_max_size
+            1.0 # alpha
+        )
+
+        end = time.time()
+        duration = end - start
+
+        solution = result.actions[1:] if len(result.actions) > 0 else []
+        h_values = [np.round(h, 3) for h in result.h_values]
+
+        report["i"].append(i)
+        report["states"].append(state)
+        report["solutions"].append(solution)
+        report["visit_nodes"].append(result.visit_nodes)
+        report["h_values"].append(h_values)
+        report["time_sec"].append(duration)
+
+        v = len(opt_solutions[i])
+        
+        print("i:", i)
+        print("V:", v)
+        print("Result actions: ", solution)
+        print("Result size: ", len(solution))
+        print("Result h_values: ", [np.round(h, 3) for h in result.h_values])
+        print("Result visit_nodes: ", result.visit_nodes)
+        print("Time sec:", np.round(duration, 3))
+
+        save_pickle(report, "./assets/reports/result_cb_on_deepcube.pickle")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='test')
@@ -121,3 +182,5 @@ if __name__ == "__main__":
         generate_val_test()
     elif args.mode == "train_catboost":
         train_catboost()
+    elif args.mode == "test_deepcube":
+        test_deepcube()

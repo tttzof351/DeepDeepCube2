@@ -1,0 +1,10 @@
+{
+    "version": 4,
+    "vendor": {
+        "conan": {}
+    },
+    "include": [
+        "/Users/euclid/Projects/DeepDeepCube/cpp/build/build/Release/generators/CMakePresets.json",
+        "build/build/Release/generators/CMakePresets.json"
+    ]
+}
