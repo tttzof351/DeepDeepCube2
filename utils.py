@@ -30,6 +30,18 @@ def save_pickle(data, path: str):
     with open(path, "wb") as f:
         pickle.dump(data, f)
 
+def check_solution(game, state, solution):
+    if len(solution) == 0:
+        return False
+    
+    if solution[0] == -1:
+        solution = solution[1:]
+
+    for action in solution:
+        state = game.apply_action(state, action)
+
+    return game.is_goal(state)    
+
 if __name__ == "__main__":
     set_seed(0)
     print(random.randint(0, 100))

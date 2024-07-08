@@ -131,7 +131,7 @@ def test_deepcube():
         "solutions": [],
         "visit_nodes": [],
         "h_values": [], 
-        "time_sec": []       
+        "time_sec": []
     }
 
     for i in tqdm(range(len(states))):

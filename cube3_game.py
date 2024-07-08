@@ -37,6 +37,13 @@ class Cube3Game:
             return action - self.direct_action_size
         else:
             return self.direct_action_size + action
+        
+    def tuple_to_id(self, t):
+        action = self.name_to_id[t[0]]
+        if t[1] == 1:
+            return action
+        else:
+            return self.reverse_action(action)
 
     def is_goal(self, state):
         return np.array_equal(state, self.initial_state)
