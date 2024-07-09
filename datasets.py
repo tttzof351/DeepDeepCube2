@@ -77,7 +77,6 @@ def _fast_get_scramble(
     # a = np.stack(scramble_states, axis=0)
     return scramble_states, scramble_actions, scramble_values
 
-
 def get_fast_scramble(game, length: int): # return (state, action, length)
     return _fast_get_scramble(
         initial_state=game.initial_state,
@@ -103,19 +102,22 @@ def get_torch_scrambles(
     states[:, :, 0] = torch.arange(
         0,
         space_size,
-        dtype=torch.int64
+        dtype=torch.int64,
+        device=permutations.device
     ).expand(n, space_size)
 
     actions = torch.randint(
         low=0, 
         high=action_size, 
-        size=(n, length)
+        size=(n, length),
+        device=permutations.device
     )
     
     lengths = torch.arange(
         1, 
         length + 1,
-        dtype=torch.int64
+        dtype=torch.int64,
+        device=permutations.device
     ).expand(n, length)
 
     action = actions[:, 0]
@@ -142,6 +144,7 @@ def get_torch_scrambles(
 class Cube3Dataset(torch.utils.data.Dataset):
     def __init__(
             self, 
+            size: int,
             length: int,
             permutations: np.array,
             n: int = 100,
@@ -155,6 +158,7 @@ class Cube3Dataset(torch.utils.data.Dataset):
         self.seed = seed
         self.n = n
         self.device = device
+        self.size = size
         
         self.permutations = torch.tensor(
             permutations, 
@@ -183,12 +187,16 @@ class Cube3Dataset(torch.utils.data.Dataset):
         )
         
     def __len__(self):
-        return 1000
-
+        return self.size
 
 if __name__ == "__main__":
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
-    dataset = Cube3Dataset(26, game.actions, n=100_000)
+    dataset = Cube3Dataset(
+        length=26, 
+        permutations=game.actions, 
+        n=1000,
+        size=100
+    )
     start = time.time()
     states, actions, lengths = next(iter(dataset))
     end = time.time()
