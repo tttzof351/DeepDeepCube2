@@ -1,9 +1,14 @@
+import os
+
 import torch
 import numpy as np
 import random
 import wyhash
 from numba import njit
 import pickle
+import time
+
+from catboost import CatBoostRegressor
 
 sec = wyhash.make_secret(0)
 
@@ -40,10 +45,21 @@ def check_solution(game, state, solution):
     for action in solution:
         state = game.apply_action(state, action)
 
-    return game.is_goal(state)    
+    return game.is_goal(state)
+
+def benchmark_catboost_inference():
+    print("os.cpu_count():", os.cpu_count())
+    model = CatBoostRegressor()
+    model.load_model("./assets/models/catboost_cube3.cb")
+    data = np.random.randint(0, 54, size=(100_000, 54))
+
+    start = time.time()
+    out = model.predict(data, thread_count=os.cpu_count())
+    end = time.time()
+
+    duration = np.round(1000 * (end - start), 3)
+    print(f"duration: {duration} ms")
+
 
 if __name__ == "__main__":
-    set_seed(0)
-    print(random.randint(0, 100))
-    set_seed(0)
-    print(random.randint(0, 100))    
+    benchmark_catboost_inference()

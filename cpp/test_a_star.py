@@ -31,40 +31,42 @@ validation = open_pickle("../assets/data/validation/val.pickle")
 test = validation = open_pickle("../assets/data/test/test.pickle")
 deepcube_test = open_pickle("../assets/data/deepcubea/data_0.pkl")
 
-# print(validation)
-i = 1
 
-# v = validation["values"][i]
-# state = validation["states"][i]
+# i = 1
 
-# v = test["values"][i]
-# state = test["states"][i]
+# # v = validation["values"][i]
+# # state = validation["states"][i]
 
-v = len(deepcube_test["solutions"][i])
-state = deepcube_test["states"][i]
+# # v = test["values"][i]
+# # state = test["states"][i]
 
-print("catboost_search_a:")
-# result = cpp_a_star.catboost_search_a(
+# v = len(deepcube_test["solutions"][i])
+# state = deepcube_test["states"][i]
+
+# print("catboost_search_a:")
+# # result = cpp_a_star.catboost_search_a(
+# #     state, # state
+# #     10_000_000, # limit size
+# #     True # debug
+# # )
+
+# result = cpp_a_star.catboost_parallel_search_a(
 #     state, # state
 #     10_000_000, # limit size
-#     True # debug
+#     True, # debug,
+#     10, # parallel_size,
+#     100000, # open_max_size
+#     1.0 # alpha
 # )
 
-result = cpp_a_star.catboost_parallel_search_a(
-    state, # state
-    10_000_000, # limit size
-    True, # debug,
-    10, # parallel_size,
-    100000, # open_max_size
-    1.0 # alpha
-)
 
+# print("i:", i)
+# print("V:", v)
+# print("Result actions: ", result.actions[1:])
+# print("Result size: ", len(result.actions[1:]))
+# print("Result h_values: ", [np.round(h, 3) for h in result.h_values])
+# print("Result visit_nodes: ", result.visit_nodes)
 
-print("i:", i)
-print("V:", v)
-print("Result actions: ", result.actions[1:])
-print("Result size: ", len(result.actions[1:]))
-print("Result h_values: ", [np.round(h, 3) for h in result.h_values])
-print("Result visit_nodes: ", result.visit_nodes)
+# # cpp_a_star.run_openmp_test()
 
-# cpp_a_star.run_openmp_test()
+cpp_a_star.benchmark_catboost_inference()

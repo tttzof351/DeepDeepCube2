@@ -2,10 +2,13 @@ import numpy as np
 import random
 from tqdm import tqdm
 import torch
-from numba import njit, jit
+import time
+from numba import njit, jit, types
+from numba.typed import List
 
+from hyperparams import hp, random_vector_cube3
 from cube3_game import Cube3Game
-from utils import array_wyhash, str_hash
+from utils import array_wyhash
 
 def get_scramble(game, length: int): # return (state, action, length)
     scramble = []
@@ -32,10 +35,166 @@ def get_scramble(game, length: int): # return (state, action, length)
     
     return scramble
 
+state_type = types.Array(types.int32, 1, 'C')  # 1D array of float64
+scramble_type = types.Tuple((state_type, types.int64, types.int64))
+
+@njit
+def _fast_get_scramble(
+        initial_state: np.array, 
+        action_size: int,
+        space_size: int,
+        actions: np.array,
+        length: int,
+): 
+    # scramble_states = List.empty_list(state_type)
+    scramble_states = np.empty((length, space_size), dtype=np.int32)
+    scramble_actions = List.empty_list(types.int64)
+    scramble_values = List.empty_list(types.int64)
+
+    state = initial_state
+
+    # dot_hash = np.dot(state, random_vector_cube3)
+    # uniq_hashes.add(array_wyhash(game.initial_state))
+    i = 0
+    while i < length:
+        action = np.random.choice(action_size)
+        new_state = state[actions[action]].astype(np.int32)
+        
+        # if len(scramble_states) < 1 or not np.array_equal(new_state, scramble_states[-1]):
+        has_duplicates = False
+        # for s in scramble_states[-3:]:
+        #     has_duplicates = has_duplicates or np.array_equal(s, new_state)
+
+        if not has_duplicates:
+            # scramble_states.append(new_state)
+            scramble_states[i, :] = new_state
+            scramble_actions.append(action)
+            scramble_values.append(len(scramble_values) + 1)
+            i += 1
+
+        state = new_state
+    
+    # a = np.stack(scramble_states, axis=0)
+    return scramble_states, scramble_actions, scramble_values
+
+
+def get_fast_scramble(game, length: int): # return (state, action, length)
+    return _fast_get_scramble(
+        initial_state=game.initial_state,
+        action_size=game.action_size,
+        space_size=game.space_size,
+        actions=game.actions,
+        length=length,
+    )
+
+@torch.jit.script
+def get_torch_scrambles(
+    n: int,
+    space_size: int,
+    action_size: int,
+    length: int,
+    permutations: torch.Tensor
+):
+    states = torch.zeros(
+        size=(n, space_size, length),
+        dtype=torch.int64
+    )
+
+    states[:, :, 0] = torch.arange(
+        0,
+        space_size,
+        dtype=torch.int64
+    ).expand(n, space_size)
+
+    actions = torch.randint(
+        low=0, 
+        high=action_size, 
+        size=(n, length)
+    )
+    
+    lengths = torch.arange(
+        1, 
+        length + 1,
+        dtype=torch.int64
+    ).expand(n, length)
+
+    action = actions[:, 0]
+    permutation = permutations[action]
+
+    states[:, :, 0] = torch.gather(
+        input=states[:, :, 0],
+        dim=1,
+        index=permutation
+    )
+
+    for i in range(1, length):
+        action = actions[:, i]
+        permutation = permutations[action]
+
+        states[:, :, i] = torch.gather(
+            input=states[:, :, i - 1],
+            dim=1,
+            index=permutation
+        )
+    
+    return states, actions, lengths
+
+class Cube3Dataset(torch.utils.data.Dataset):
+    def __init__(
+            self, 
+            length: int,
+            permutations: np.array,
+            n: int = 100,
+            device = "cpu",
+            seed=0
+        ):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+        self.seed = seed
+        self.n = n
+        self.device = device
+        
+        self.permutations = torch.tensor(
+            permutations, 
+            dtype=torch.int64,
+            device=device,            
+        )
+
+        self.action_size = self.permutations.shape[0]
+        self.space_size = self.permutations.shape[1]
+
+        self.init_state = torch.arange(
+            0, 
+            self.permutations.shape[1],             
+            device=device
+        )
+        self.length = length
+
+    @torch.jit.export
+    def __getitem__(self, idx):
+        return get_torch_scrambles(
+            n=self.n,
+            space_size=self.space_size,
+            action_size=self.action_size,
+            length=self.length,
+            permutations=self.permutations
+        )
+        
+    def __len__(self):
+        return 1000
+
+
 if __name__ == "__main__":
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
-    
-    for _ in tqdm(range(10_000)):
-        scramble = get_scramble(game, 1000)
+    dataset = Cube3Dataset(26, game.actions, n=100_000)
+    start = time.time()
+    states, actions, lengths = next(iter(dataset))
+    end = time.time()
 
-    print(len(scramble))
+    duration = end - start
+    print("states:", states.shape)
+    print("actions:", actions.shape)
+    print("lengths:", lengths.shape)
+    print("duration:", duration)

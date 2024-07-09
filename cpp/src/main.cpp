@@ -10,6 +10,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
+#include <random>
 
 #include "utils.h"
 #include "cube3_game.h"
@@ -228,6 +229,47 @@ void check_hashes() {
     std::cout << "v2 hash:" << hash_v2 << std::endl;
 }
 
+void benchmark_catboost_inference() {
+    std::random_device dev;
+    std::mt19937 rng(dev());
+    std::uniform_int_distribution<std::mt19937::result_type> dist6(0, 53); // distribution in range [1, 6]
+
+    const int C = 100'000;
+
+    std::vector<float>* data = new std::vector<float>[C];
+
+    for (int i = 0; i < C; i++) {
+        for (int j = 0; j < 54; j++) {
+            data[i].push_back(float(dist6(rng)));
+        }
+        // std::cout << dist6(rng) << std::endl;
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    float res[C];
+    #pragma omp parallel for
+    for (int i = 0; i < C; i++) {
+        res[i] = ApplyCatboostModel(data[i]);
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    cout << "size close: " 
+    << "; Duration: " 
+    << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()  
+    << " ms"
+    << endl; 
+
+    float s = 0;
+    for (int i = 0; i < C; i++) {
+        s += res[i];
+    }
+
+    std::cout << "S:" << s << std::endl;
+
+    // delete[] data;
+}
+
 
 PYBIND11_MODULE(cpp_a_star, m) { 
     m.doc() = "cpp_a_star module"; 
@@ -245,7 +287,7 @@ PYBIND11_MODULE(cpp_a_star, m) {
     m.def("catboost_search_a", &catboost_search_a, "catboost_search_a"); 
     m.def("catboost_parallel_search_a", &catboost_parallel_search_a, "catboost_parallel_search_a"); 
     m.def("check_hashes", &check_hashes, "check_hashes");
-
+    m.def("benchmark_catboost_inference", &benchmark_catboost_inference, "benchmark_catboost_inference");
     
     // m.def("test_allocation_dealocation", &test_allocation_dealocation, "test_allocation_dealocation");
 }
