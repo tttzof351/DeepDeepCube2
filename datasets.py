@@ -95,11 +95,11 @@ def get_torch_scrambles(
     permutations: torch.Tensor
 ):
     states = torch.zeros(
-        size=(n, space_size, length),
+        size=(n, length, space_size),
         dtype=torch.int64
     )
 
-    states[:, :, 0] = torch.arange(
+    states[:, 0, :] = torch.arange(
         0,
         space_size,
         dtype=torch.int64,
@@ -123,8 +123,8 @@ def get_torch_scrambles(
     action = actions[:, 0]
     permutation = permutations[action]
 
-    states[:, :, 0] = torch.gather(
-        input=states[:, :, 0],
+    states[:, 0, :] = torch.gather(
+        input=states[:, 0, :],
         dim=1,
         index=permutation
     )
@@ -133,13 +133,14 @@ def get_torch_scrambles(
         action = actions[:, i]
         permutation = permutations[action]
 
-        states[:, :, i] = torch.gather(
-            input=states[:, :, i - 1],
+        states[:, i, :] = torch.gather(
+            input=states[:, i - 1, :],
             dim=1,
             index=permutation
         )
     
     return states.view(-1, space_size), actions.view(-1), lengths.view(-1)
+    # return states, actions, lengths
 
 class Cube3Dataset(torch.utils.data.Dataset):
     def __init__(
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     dataset = Cube3Dataset(
         length=26, 
         permutations=game.actions, 
-        n=1000,
+        n=2,
         size=100
     )
     start = time.time()
@@ -203,6 +204,4 @@ if __name__ == "__main__":
 
     duration = end - start
     print("states:", states.shape)
-    print("actions:", actions.shape)
-    print("lengths:", lengths.shape)
-    print("duration:", duration)
+    print("states:", states[:2, :])

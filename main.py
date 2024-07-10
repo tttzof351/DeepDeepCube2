@@ -172,7 +172,6 @@ def test_deepcube():
 
         save_pickle(report, "./assets/reports/result_cb_on_deepcube.pickle")
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='test')
