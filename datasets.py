@@ -116,9 +116,9 @@ def get_torch_scrambles(
     lengths = torch.arange(
         1, 
         length + 1,
-        dtype=torch.int64,
+        dtype=torch.float32,
         device=permutations.device
-    ).expand(n, length)
+    ).expand(n, length).clone()
 
     action = actions[:, 0]
     permutation = permutations[action]
@@ -139,7 +139,7 @@ def get_torch_scrambles(
             index=permutation
         )
     
-    return states, actions, lengths
+    return states.view(-1, space_size), actions.view(-1), lengths.view(-1)
 
 class Cube3Dataset(torch.utils.data.Dataset):
     def __init__(

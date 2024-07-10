@@ -51,6 +51,7 @@ class Pilgrim(nn.Module):
             ResidualBlock(hidden_dim2, dropout_rate) for _ in range(num_residual_blocks)
         ])
         self.output_layer = nn.Linear(hidden_dim2, output_dim)
+        self.output_probs_layer = nn.Linear(hidden_dim2, 12)
         self.relu = nn.ReLU()
         self.bn1 = nn.BatchNorm1d(hidden_dim1)
         self.bn2 = nn.BatchNorm1d(hidden_dim2)
@@ -72,9 +73,11 @@ class Pilgrim(nn.Module):
         for layer in self.residual_blocks:
             x = layer(x)
         
-        x = self.output_layer(x)
+        out = self.output_layer(x)
 
-        return x
+        probs_out = self.output_probs_layer(x)
+
+        return out, probs_out
 
     def to_script(self):
         model = torch.jit.script(self)
@@ -87,20 +90,23 @@ def count_parameters(model: nn.Module) -> int:
 
 if __name__ == "__main__":
     model = Pilgrim()
-
+    model.eval()
     print("No script")
     start = time.time()
-    for _ in range(100):
-        _ = model(torch.randint(low=0, high=54, size=(1024, 54)))
+    for _ in range(100):        
+        with torch.no_grad():
+            _ = model(torch.randint(low=0, high=54, size=(10240, 54)))
     end = time.time()
     duration = np.round(end - start, 3)
     print(f"Duration: {duration} sec")
 
     print("With script")
     model = model.to_script()
+    model.eval()
     start = time.time()
     for _ in range(100):
-        _ = model(torch.randint(low=0, high=54, size=(1024, 54)))
+        with torch.no_grad():
+            _ = model(torch.randint(low=0, high=54, size=(10240, 54)))
     end = time.time()
     duration = np.round(end - start, 3)
     print(f"Duration: {duration} sec")
