@@ -4,6 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Dict,Tuple,Optional,List
+
+
 class ResidualBlock(nn.Module):
     def __init__(
             self, 
@@ -57,7 +60,7 @@ class Pilgrim(nn.Module):
         self.bn2 = nn.BatchNorm1d(hidden_dim2)
         self.dropout = nn.Dropout(dropout_rate)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         x = (x / 9).long()
 
         x = F.one_hot(x.long(), 6)
@@ -81,8 +84,10 @@ class Pilgrim(nn.Module):
 
     def to_script(self):
         model = torch.jit.script(self)
-        # model = torch.jit.trace(model, torch.randint(low=0, high=54, size=(2, 54)))
-        # model = torch.compile(model)
+        return model
+    
+    def traced_model(self):
+        model = torch.jit.trace(self, torch.randint(low=0, high=54, size=(2, 54)))
         return model
 
 def count_parameters(model: nn.Module) -> int:
