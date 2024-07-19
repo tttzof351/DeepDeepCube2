@@ -11,14 +11,14 @@ from models import Pilgrim
 
 class BeamSearch:
     def __init__(
-            self,
-            model: torch.nn.Module,
-            num_steps: int, 
-            beam_width: int,
-            generators: torch.Tensor,
-            goal_state: torch.Tensor,
-            device: torch.device
-        ):
+        self,
+        model: torch.nn.Module,
+        num_steps: int, 
+        beam_width: int,
+        generators: torch.Tensor,
+        goal_state: torch.Tensor,
+        device: torch.device
+    ):
         self.model = model
         self.num_steps = num_steps
         self.beam_width = beam_width
@@ -29,13 +29,22 @@ class BeamSearch:
         self.hash_vec = torch.randint(0, 1_000_000_000_000, (self.state_size,))
         self.goal_state = goal_state
 
-    def get_unique_states(self, states: torch.Tensor) -> torch.Tensor:
+        self.model.eval()
+        self.model.to(device)
+
+    def get_unique_states(
+        self, 
+        states: torch.Tensor
+    ) -> torch.Tensor:
         hashed = torch.sum(self.hash_vec * states, dim=1)
         hashed_sorted, idx = torch.sort(hashed)
         mask = torch.cat((torch.tensor([True]), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
         return states[idx][mask]
 
-    def get_neighbors(self, states: torch.Tensor) -> torch.Tensor:
+    def get_neighbors(
+        self, 
+        states: torch.Tensor
+    ) -> torch.Tensor:
         return torch.gather(
             states.unsqueeze(1).expand(states.size(0), self.n_gens, self.state_size), 
             2, 
@@ -43,15 +52,12 @@ class BeamSearch:
         )
 
     def batch_predict(
-            self, 
-            model: torch.nn.Module, 
-            data: torch.Tensor, 
-            device: torch.device, 
-            batch_size: int
-        ) -> torch.Tensor:        
-        model.eval()        
-        model.to(device)
-
+        self, 
+        model: torch.nn.Module, 
+        data: torch.Tensor, 
+        device: torch.device,
+        batch_size: int
+    ) -> torch.Tensor:        
         n_samples = data.shape[0]
         outputs = []
 
@@ -68,13 +74,23 @@ class BeamSearch:
         final_output = torch.cat(outputs, dim=0)
         return final_output
 
-    def predict_values(self, states: torch.Tensor) -> torch.Tensor:
+    def predict_values(
+        self, 
+        states: torch.Tensor
+    ) -> torch.Tensor:
         return self.batch_predict(self.model, states, self.device, 4096).cpu()
 
-    def predict_clipped_values(self, states: torch.Tensor) -> torch.Tensor:
+    def predict_clipped_values(
+        self, 
+        states: torch.Tensor
+    ) -> torch.Tensor:
         return torch.clip(self.predict_values(states), 0, torch.inf)
 
-    def do_greedy_step(self, states: torch.Tensor, B: int = 1000) -> torch.Tensor:
+    def do_greedy_step(
+        self, 
+        states: torch.Tensor, 
+        B: int = 1000
+    ) -> torch.Tensor:
         neighbors = self.get_neighbors(states).flatten(end_dim=1)
         neighbors = self.get_unique_states(neighbors)
         y_pred = self.predict_clipped_values(neighbors)
@@ -82,9 +98,9 @@ class BeamSearch:
         return neighbors[idx]
 
     def search(
-            self,
-            state: torch.Tensor
-        ):
+        self,
+        state: torch.Tensor
+    ):
         if len(state.shape) < 2:
             state = state.unsqueeze(0)
 
