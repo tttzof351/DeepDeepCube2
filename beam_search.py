@@ -107,8 +107,10 @@ class BeamSearch:
     def predict_values(
         self, 
         states: torch.Tensor
-    ) -> torch.Tensor:
+    ) -> torch.Tensor:        
         values, policy = self.batch_predict(self.model, states, self.device, 4096)
+        self.processed_states_count += states.shape[0]
+
         values = values.cpu()
         policy = policy.cpu()
 
@@ -150,6 +152,7 @@ class BeamSearch:
             fill_value=-1,
             dtype=torch.int64
         )
+        self.processed_states_count = 0
 
         self.model.eval()
         self.states = state.clone()
@@ -159,8 +162,8 @@ class BeamSearch:
             if (len(search_result) > 0):
                 solution_index = search_result.item()
                 solution = self.candidate_solutions[:, solution_index]
-                return solution[1:]
-        return None
+                return solution[1:], self.processed_states_count
+        return None, self.processed_states_count
 
 if __name__ == "__main__":
     deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
@@ -188,11 +191,13 @@ if __name__ == "__main__":
         goal_state=goal_state,
         device = "mps"
     )
-    solution = beam_search.search(state=state)
+    solution, processed_states_count = beam_search.search(state=state)
+    count_millions = np.round(processed_states_count / 10**6, 3)
     end = time.time()
     duration = np.round(end - start, 3)
 
     print("solution_len:", len(solution))
+    print(f"processed_states_count: {count_millions}M")
     print(f"duration: {duration} sec")
     
     print("state", state.shape)    
