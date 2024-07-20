@@ -106,13 +106,8 @@ class BeamSearch:
     ) -> torch.Tensor:
         return torch.clip(self.predict_values(states), 0, torch.inf)
 
-    def do_greedy_step(
-        self, 
-        states: torch.Tensor,
-        candidate_solutions: torch.Tensor, 
-        beam_width: int = 1000
-    ) -> torch.Tensor:
-        neighbors, candidate_solutions = self.get_neighbors(states, candidate_solutions)
+    def update_greedy_step(self) -> torch.Tensor:
+        neighbors, candidate_solutions = self.get_neighbors(self.states, self.candidate_solutions)
         
         neighbors = neighbors.flatten(end_dim=1)
         
@@ -122,12 +117,13 @@ class BeamSearch:
         neighbors = neighbors[idx_uniq]
         
         y_pred = self.predict_clipped_values(neighbors)
-        idx = torch.argsort(y_pred)[:beam_width]
+        idx = torch.argsort(y_pred)[:self.beam_width]
 
         candidate_solutions = candidate_solutions[:, idx]
         neighbors = neighbors[idx]
 
-        return neighbors, candidate_solutions
+        self.states = neighbors 
+        self.candidate_solutions = candidate_solutions
 
     def search(
         self,
@@ -136,30 +132,26 @@ class BeamSearch:
         if len(state.shape) < 2:
             state = state.unsqueeze(0)
 
-        candidate_solutions = torch.full(
+        self.candidate_solutions = torch.full(
             size=[1, 1], # (path of action, different solutions)
             fill_value=-1,
             dtype=torch.int64
         )
 
         self.model.eval()
-        states = state.clone()
+        self.states = state.clone()
         for j in range(self.num_steps):
-            states, candidate_solutions = self.do_greedy_step(
-                states=states, 
-                candidate_solutions=candidate_solutions,
-                beam_width=self.beam_width,
-            )
-            search_result = (states == self.goal_state).all(dim=1).nonzero(as_tuple=True)[0]
+            self.update_greedy_step()
+            search_result = (self.states == self.goal_state).all(dim=1).nonzero(as_tuple=True)[0]
             if (len(search_result) > 0):
                 solution_index = search_result.item()
-                solution = candidate_solutions[:, solution_index]
+                solution = self.candidate_solutions[:, solution_index]
                 return solution[1:]
         return None
 
 if __name__ == "__main__":
     deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
-    i = 1
+    i = 42
     state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
     solution = deepcube_test['solutions'][i]    
 
@@ -188,7 +180,7 @@ if __name__ == "__main__":
     duration = np.round(end - start, 3)
 
     print("solution_len:", len(solution))
-    print("duration:", duration)
+    print(f"duration: {duration} sec")
     
     print("state", state.shape)    
     for a in solution:
