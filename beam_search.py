@@ -42,13 +42,11 @@ class BeamSearch:
 
         return idx[mask]
 
-    def get_neighbors(
+    def expand_canditate_solutions(
         self, 
         states: torch.Tensor,
         candidate_solutions: torch.Tensor
-    ) -> torch.Tensor:
-        expanded_states = states.unsqueeze(1).expand(states.size(0), self.n_gens, self.state_size)
-        
+    ):
         expand_candidate_solutions = candidate_solutions.unsqueeze(2) # (path_of_action, different_solutions, 1)
         
         expand_candidate_solutions = expand_candidate_solutions.expand(
@@ -62,14 +60,23 @@ class BeamSearch:
             candidate_solutions.size(1) * self.n_gens
         ) # (path_of_action, different_solutions * ngens=12)
 
-        indexes = self.generators.unsqueeze(0).expand(states.size(0), self.n_gens, self.state_size)        
-        new_states = torch.gather(input=expanded_states, dim=2, index=indexes)
-
         applied_actions = torch.arange(0, self.n_gens, dtype=torch.int64).expand(states.size(0), self.n_gens)
         applied_actions = applied_actions.reshape(1, applied_actions.shape[0] * applied_actions.shape[1])
         candidate_solutions = torch.cat([expand_candidate_solutions, applied_actions]) 
+        
+        return candidate_solutions
 
-        return new_states, candidate_solutions
+    def get_neighbors(
+        self, 
+        states: torch.Tensor
+    ) -> torch.Tensor:
+        expanded_states = states.unsqueeze(1).expand(states.size(0), self.n_gens, self.state_size)
+        
+        indexes = self.generators.unsqueeze(0).expand(states.size(0), self.n_gens, self.state_size)        
+        new_states = torch.gather(input=expanded_states, dim=2, index=indexes)
+
+
+        return new_states
 
     def batch_predict(
         self, 
@@ -79,35 +86,41 @@ class BeamSearch:
         batch_size: int
     ) -> torch.Tensor:        
         n_samples = data.shape[0]
-        outputs = []
+        values = []
+        policies = []
 
         for start in range(0, n_samples, batch_size):
             end = start + batch_size
             batch = data[start:end].to(device)
 
             with torch.no_grad():
-                batch_output, _  = model(batch)
-                batch_output = batch_output.flatten()
+                batch_values, batch_policy = model(batch)
+                batch_values = batch_values.squeeze(dim=1)
 
-            outputs.append(batch_output)
+            values.append(batch_values)
+            policies.append(batch_policy)
 
-        final_output = torch.cat(outputs, dim=0)
-        return final_output
+        values = torch.cat(values, dim=0)
+        policies = torch.cat(policies, dim=0)
+        return values, policies
 
     def predict_values(
         self, 
         states: torch.Tensor
     ) -> torch.Tensor:
-        return self.batch_predict(self.model, states, self.device, 4096).cpu()
+        values, policy = self.batch_predict(self.model, states, self.device, 4096)
+        values = values.cpu()
+        policy = policy.cpu()
 
-    def predict_clipped_values(
-        self, 
-        states: torch.Tensor
-    ) -> torch.Tensor:
-        return torch.clip(self.predict_values(states), 0, torch.inf)
+        return values, policy
 
     def update_greedy_step(self) -> torch.Tensor:
-        neighbors, candidate_solutions = self.get_neighbors(self.states, self.candidate_solutions)
+        neighbors = self.get_neighbors(self.states)
+        
+        candidate_solutions = self.expand_canditate_solutions(
+            states=self.states, 
+            candidate_solutions=self.candidate_solutions
+        )
         
         neighbors = neighbors.flatten(end_dim=1)
         
@@ -116,8 +129,8 @@ class BeamSearch:
         candidate_solutions = candidate_solutions[:, idx_uniq]
         neighbors = neighbors[idx_uniq]
         
-        y_pred = self.predict_clipped_values(neighbors)
-        idx = torch.argsort(y_pred)[:self.beam_width]
+        pred_values, pred_policy = self.predict_values(neighbors)
+        idx = torch.argsort(pred_values)[:self.beam_width]
 
         candidate_solutions = candidate_solutions[:, idx]
         neighbors = neighbors[idx]
