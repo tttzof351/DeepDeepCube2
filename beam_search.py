@@ -32,17 +32,15 @@ class BeamSearch:
         self.model.eval()
         self.model.to(device)
 
-    def get_unique_states(
+    def get_unique_states_idx(
         self, 
-        states: torch.Tensor,
-        candidate_solutions: torch.Tensor
+        states: torch.Tensor
     ) -> torch.Tensor:
         hashed = torch.sum(self.hash_vec * states, dim=1)
         hashed_sorted, idx = torch.sort(hashed)
         mask = torch.cat((torch.tensor([True]), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
 
-        candidate_solutions = candidate_solutions[:, idx[mask]]
-        return states[idx[mask]], candidate_solutions
+        return idx[mask]
 
     def get_neighbors(
         self, 
@@ -118,7 +116,10 @@ class BeamSearch:
         
         neighbors = neighbors.flatten(end_dim=1)
         
-        neighbors, candidate_solutions = self.get_unique_states(neighbors, candidate_solutions)
+        idx_uniq = self.get_unique_states_idx(neighbors)
+
+        candidate_solutions = candidate_solutions[:, idx_uniq]
+        neighbors = neighbors[idx_uniq]
         
         y_pred = self.predict_clipped_values(neighbors)
         idx = torch.argsort(y_pred)[:beam_width]
