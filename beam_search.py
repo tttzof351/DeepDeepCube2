@@ -1,6 +1,7 @@
 import time
 
 import torch
+import torch.nn.functional as F
 import numpy as np
 
 from utils import open_pickle
@@ -44,7 +45,6 @@ class BeamSearch:
 
     def expand_canditate_solutions(
         self, 
-        states: torch.Tensor,
         candidate_solutions: torch.Tensor
     ):
         expand_candidate_solutions = candidate_solutions.unsqueeze(2) # (path_of_action, different_solutions, 1)
@@ -60,7 +60,12 @@ class BeamSearch:
             candidate_solutions.size(1) * self.n_gens
         ) # (path_of_action, different_solutions * ngens=12)
 
-        applied_actions = torch.arange(0, self.n_gens, dtype=torch.int64).expand(states.size(0), self.n_gens)
+        # print("states.size(0):", states.size(0))
+        # print("candidate_solutions.size(1):", candidate_solutions.size(1))
+        applied_actions = torch.arange(0, self.n_gens, dtype=torch.int64).expand(
+            candidate_solutions.size(1), 
+            self.n_gens
+        )
         applied_actions = applied_actions.reshape(1, applied_actions.shape[0] * applied_actions.shape[1])
         candidate_solutions = torch.cat([expand_candidate_solutions, applied_actions]) 
         
@@ -110,21 +115,26 @@ class BeamSearch:
     ) -> torch.Tensor:        
         values, policy = self.batch_predict(self.model, states, self.device, 4096)
         self.processed_states_count += states.shape[0]
+        if (self.processed_states_count - self.printed_count > 1_000_000):
+            count_millions = np.round(self.processed_states_count / 10**6, 3)
+            print(f"Processed: {count_millions}M")
+            self.printed_count = self.processed_states_count
+
 
         values = values.cpu()
         policy = policy.cpu()
 
         return values, policy
-
+    
     def update_greedy_step(self) -> torch.Tensor:
         neighbors = self.get_neighbors(self.states)
         
-        candidate_solutions = self.expand_canditate_solutions(
-            states=self.states, 
-            candidate_solutions=self.candidate_solutions
-        )
+        candidate_solutions = self.expand_canditate_solutions(self.candidate_solutions)
         
         neighbors = neighbors.flatten(end_dim=1)
+
+        # print("neighbors:", neighbors.shape)
+        # print("parent_log_values:", self.parent_log_values.shape)
         
         idx_uniq = self.get_unique_states_idx(neighbors)
 
@@ -132,13 +142,16 @@ class BeamSearch:
         neighbors = neighbors[idx_uniq]
         
         pred_values, pred_policy = self.predict_values(neighbors)
-        idx = torch.argsort(pred_values)[:self.beam_width]
+        log_values = torch.log(pred_values)
+        scores = log_values
+        idx = torch.argsort(scores)[:self.beam_width]
 
         candidate_solutions = candidate_solutions[:, idx]
         neighbors = neighbors[idx]
 
-        self.states = neighbors 
+        self.states = neighbors
         self.candidate_solutions = candidate_solutions
+        self.parent_log_values = log_values[idx]
 
     def search(
         self,
@@ -153,6 +166,8 @@ class BeamSearch:
             dtype=torch.int64
         )
         self.processed_states_count = 0
+        self.printed_count = 0
+        self.parent_log_values = torch.tensor([0])
 
         self.model.eval()
         self.states = state.clone()
