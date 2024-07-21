@@ -16,6 +16,7 @@ class BeamSearch:
         model: torch.nn.Module,
         num_steps: int, 
         beam_width: int,
+        alpha: float,
         generators: torch.Tensor,
         goal_state: torch.Tensor,
         device: torch.device
@@ -23,6 +24,7 @@ class BeamSearch:
         self.model = model
         self.num_steps = num_steps
         self.beam_width = beam_width
+        self.alpha = alpha
         self.generators = generators
         self.n_gens = generators.size(0)
         self.state_size = generators.size(1)
@@ -70,16 +72,28 @@ class BeamSearch:
         candidate_solutions = torch.cat([expand_candidate_solutions, applied_actions]) 
         
         return candidate_solutions
+    
+    def expand_log_values(
+        self, 
+        log_values: torch.Tensor
+    ):
+        expanded_log_values = log_values.unsqueeze(dim=1).expand(
+            log_values.shape[0],
+            self.n_gens    
+        ).reshape(
+            log_values.shape[0] * self.n_gens
+        )
+        
+        return expanded_log_values
 
     def get_neighbors(
         self, 
         states: torch.Tensor
     ) -> torch.Tensor:
-        expanded_states = states.unsqueeze(1).expand(states.size(0), self.n_gens, self.state_size)
-        
+        expanded_states = states.unsqueeze(1).expand(states.size(0), self.n_gens, self.state_size)        
         indexes = self.generators.unsqueeze(0).expand(states.size(0), self.n_gens, self.state_size)        
+        
         new_states = torch.gather(input=expanded_states, dim=2, index=indexes)
-
 
         return new_states
 
@@ -129,29 +143,33 @@ class BeamSearch:
     def update_greedy_step(self) -> torch.Tensor:
         neighbors = self.get_neighbors(self.states)
         
-        candidate_solutions = self.expand_canditate_solutions(self.candidate_solutions)
-        
+        candidate_solutions = self.expand_canditate_solutions(self.candidate_solutions)        
         neighbors = neighbors.flatten(end_dim=1)
 
-        # print("neighbors:", neighbors.shape)
-        # print("parent_log_values:", self.parent_log_values.shape)
+        expanded_log_values = self.expand_log_values(self.parent_log_values)
         
         idx_uniq = self.get_unique_states_idx(neighbors)
 
         candidate_solutions = candidate_solutions[:, idx_uniq]
         neighbors = neighbors[idx_uniq]
+        expanded_log_values = expanded_log_values[idx_uniq]
         
         pred_values, pred_policy = self.predict_values(neighbors)
         log_values = torch.log(pred_values)
-        scores = log_values
-        idx = torch.argsort(scores)[:self.beam_width]
+
+        # print("log_values:", log_values.shape)
+        # print("parent_log_values:", expanded_log_values.shape)
+        
+        log_scores = log_values + expanded_log_values * self.alpha
+        idx = torch.argsort(log_scores)[:self.beam_width]
 
         candidate_solutions = candidate_solutions[:, idx]
         neighbors = neighbors[idx]
+        log_scores = log_scores[idx]
 
         self.states = neighbors
         self.candidate_solutions = candidate_solutions
-        self.parent_log_values = log_values[idx]
+        self.parent_log_values = log_scores
 
     def search(
         self,
@@ -203,6 +221,7 @@ if __name__ == "__main__":
         generators=generators,
         num_steps=100,
         beam_width=100000,
+        alpha=0.0,
         goal_state=goal_state,
         device = "mps"
     )
