@@ -149,7 +149,7 @@ class BeamSearch:
         candidate_solutions = self.expand_canditate_solutions(self.candidate_solutions)        
         neighbors = neighbors.flatten(end_dim=1)
 
-        print(f"{self.global_i}) neighbours_states:", neighbors.shape)
+        # print(f"{self.global_i}) neighbours_states:", neighbors.shape)
 
         expanded_log_values = self.expand_log_values(self.parent_log_values)
         
@@ -177,8 +177,8 @@ class BeamSearch:
         self.parent_log_values = log_scores
 
         if self.global_i > 10:
-            # pass
-            exit()
+            pass
+            # exit()
         self.global_i += 1
 
     def search(
@@ -211,7 +211,7 @@ class BeamSearch:
 
 if __name__ == "__main__":
     deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
-    i = 42
+    i = 0
     state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
     solution = deepcube_test['solutions'][i]    
 

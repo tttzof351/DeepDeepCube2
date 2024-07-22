@@ -142,6 +142,11 @@ def get_torch_scrambles(
     return states.view(-1, space_size), actions.view(-1), lengths.view(-1)
     # return states, actions, lengths
 
+@torch.jit.script
+def reverse_actions(actions: torch.Tensor, n_gens: int):
+    n_gens_half = n_gens / 2
+    return actions - n_gens_half * (2 * (actions >= n_gens_half).int() - 1)
+
 class Cube3Dataset(torch.utils.data.Dataset):
     def __init__(
             self, 

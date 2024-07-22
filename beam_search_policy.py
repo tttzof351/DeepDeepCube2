@@ -8,6 +8,8 @@ from utils import open_pickle
 
 from cube3_game import Cube3Game
 from models import Pilgrim
+from datasets import get_torch_scrambles
+from utils import set_seed
 
 
 class BeamSearch:
@@ -181,51 +183,54 @@ class BeamSearch:
             self.n_gens * self.parent_cumulative_policy.shape[0]
         ) # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
 
-        scores = torch.log(neighbors_policy_flatten) + expanded_parent_cumulative_policy * 0.5 # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        scores = torch.log(neighbors_policy_flatten) + expanded_parent_cumulative_policy * 1.0 # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
         neighbours_hashes = self.get_hashes(neighbours_states)
-        # unique_hahes_mask = [h not in self.processed_states for h in neighbours_hashes.tolist()]
+        unique_hahes_mask = [h not in self.processed_states for h in neighbours_hashes.tolist()]
 
         # for i, m in enumerate(unique_hahes_mask):
         #     if not m:
         #         print(f"i: {i}, m: {m}; h: {neighbours_hashes.tolist()[i]}")
         #         print("n_s:", neighbours_states[i, :])
 
-        # unique_hahes_mask = torch.tensor(unique_hahes_mask)
+        unique_hahes_mask = torch.tensor(unique_hahes_mask)
         
-        # neighbours_hashes = neighbours_hashes[unique_hahes_mask]
-        # expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-        # neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-        # neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-        # expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-        # scores = scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        neighbours_hashes = neighbours_hashes[unique_hahes_mask]
+        expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        scores = scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
         hashed_sorted, hashed_idx = torch.sort(neighbours_hashes)
         unique_hahes_mask_2 = torch.cat((torch.tensor([True]), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
-        hashed_idx = hashed_idx[unique_hahes_mask_2]
+        hashed_idx_2 = hashed_idx[unique_hahes_mask_2]
         
         # count_removed = (unique_hahes_mask_2 == False).int().sum()
         # print(f"{self.global_i}) count_removed:", count_removed)
 
-        neighbours_hashes = neighbours_hashes[hashed_idx]
-        expanded_actions = expanded_actions[hashed_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-        neighbours_states = neighbours_states[hashed_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-        neighbors_policy_flatten = neighbors_policy_flatten[hashed_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[hashed_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-        scores = scores[hashed_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        neighbours_hashes = neighbours_hashes[hashed_idx_2]
+        expanded_actions = expanded_actions[hashed_idx_2] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        neighbours_states = neighbours_states[hashed_idx_2, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        neighbors_policy_flatten = neighbors_policy_flatten[hashed_idx_2] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[hashed_idx_2] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        scores = scores[hashed_idx_2] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
-        # scores_idx = torch.argsort(scores, descending=True)#[:100_000] # beam width TODO
-        
-        # expanded_actions = expanded_actions[scores_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-        # neighbours_states = neighbours_states[scores_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-        # neighbors_policy_flatten = neighbors_policy_flatten[scores_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-        # expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[scores_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-        # scores = scores[scores_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
-        # neighbours_hashes = neighbours_hashes[scores_idx]
+        scores_idx = torch.argsort(scores, descending=True)[:1_000_000] # beam width TODO
+        # scores_idx = torch.argsort(scores, descending=True)[:int(0.9 * len(scores))] # beam width TODO        
+
+        expanded_actions = expanded_actions[scores_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        neighbours_states = neighbours_states[scores_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        neighbors_policy_flatten = neighbors_policy_flatten[scores_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[scores_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        scores = scores[scores_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        neighbours_hashes = neighbours_hashes[scores_idx]
         
         v, p = self.predict(neighbours_states) # (N_STATES)    
         
-        v_idx = torch.argsort(v)[:100_000]
+        # v_idx = torch.argsort(v)[:100_000]
+        # v_idx = torch.argsort(v)
+        v_idx = torch.arange(0, v.shape[0], dtype=torch.int64)
         
         expanded_actions = expanded_actions[v_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
         neighbours_states = neighbours_states[v_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
@@ -241,16 +246,16 @@ class BeamSearch:
         self.neighbors_policy = p # (N_STATES, N_GENS) - ~12 floats for one state
         self.parent_cumulative_policy = scores
 
-        # print(f"{self.global_i}) v:", v[:3])
+        print(f"{self.global_i}) v:", v[:3], "; s:", scores[:3] )
         # print(f"{self.global_i}) s:", scores[:3])
 
         for h in neighbours_hashes.tolist():
-            # self.processed_states.add(h)
-            pass
+            self.processed_states.add(h)
+            # pass
 
         ######## ######## ######## ######## ########        
 
-        if self.global_i > 10:
+        if self.global_i > 0:
             pass
             # exit()
         self.global_i += 1
@@ -308,7 +313,8 @@ class BeamSearch:
             self.update_greedy_step()
             search_result = (self.states == self.goal_state).all(dim=1).nonzero(as_tuple=True)[0]
             if (len(search_result) > 0):
-                print("Found! j:", j)
+                # print("Found! j:", j)
+                return j+1, None
                 solution_index = search_result.item()
                 solution = self.candidate_solutions[:, solution_index]
                 return solution[1:], self.processed_states_count
@@ -317,45 +323,67 @@ class BeamSearch:
         return None, self.processed_states_count
 
 if __name__ == "__main__":
+    set_seed(0)
     deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
-    i = 42
+    game = Cube3Game("./assets/envs/qtm_cube3.pickle")
+    generators = torch.tensor(game.actions, dtype=torch.int64)
+
+    i = 0
     state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
     solution = deepcube_test['solutions'][i]    
+    solution = deepcube_test['solutions'][i]    
+
+    solution = deepcube_test['solutions'][i] 
 
     print("state:", state.shape)
     print("solution_len (optimal):", len(solution))
 
-    model = Pilgrim()
-    model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel.pt"))
+    # states, actions, values = get_torch_scrambles(
+    #     n = 1,
+    #     space_size = game.space_size,
+    #     action_size = game.action_size,
+    #     length = 20,
+    #     permutations = generators
+    # )
+    # state = states[-1, :]
+    # value = values[-1].item()
+    # print("value:", value)
 
-    game = Cube3Game("./assets/envs/qtm_cube3.pickle")
-    
-    generators = torch.tensor(game.actions, dtype=torch.int64)
+
+    model = Pilgrim(
+        hidden_dim1 = 500, 
+        hidden_dim2  = 300, 
+        num_residual_blocks = 3
+    )
+    model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel_policy.pt"))
+
     goal_state = torch.arange(0, 54, dtype=torch.int64)
     
     start = time.time()
     beam_search = BeamSearch(
         model=model,
         generators=generators,
-        num_steps=1000,
+        num_steps=100,
         beam_width=100_000,
         alpha=0.0,
         goal_state=goal_state,
         device = "mps"
     )
     solution, processed_states_count = beam_search.search(state=state)
-    count_millions = np.round(processed_states_count / 10**6, 3)
-    end = time.time()
-    duration = np.round(end - start, 3)
+    print("solution_len:", solution)
 
-    print("solution_len:", len(solution))
-    print(f"processed_states_count: {count_millions}M")
-    print(f"duration: {duration} sec")
+    # count_millions = np.round(processed_states_count / 10**6, 3)
+    # end = time.time()
+    # duration = np.round(end - start, 3)
+
+    # print("solution_len:", len(solution))
+    # print(f"processed_states_count: {count_millions}M")
+    # print(f"duration: {duration} sec")
     
-    print("state", state.shape)    
-    for a in solution:
-        state = state[:, generators[a]]
+    # print("state", state.shape)    
+    # for a in solution:
+    #     state = state[:, generators[a]]
     
-    print("solution:", solution)
-    print("result_state:", state)
-    print("state == goal_state:", (state == goal_state).all(dim=1))
+    # print("solution:", solution)
+    # print("result_state:", state)
+    # print("state == goal_state:", (state == goal_state).all(dim=1))

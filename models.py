@@ -41,7 +41,8 @@ class Pilgrim(nn.Module):
         hidden_dim2: int = 200, 
         num_residual_blocks: int = 2, 
         output_dim: int = 1, 
-        dropout_rate: float = 0.1
+        dropout_rate: float = 0.1,
+        n_gens: int = 12
     ) -> None:
         super(Pilgrim, self).__init__()
         self.hd1 = hidden_dim1
@@ -54,7 +55,7 @@ class Pilgrim(nn.Module):
             ResidualBlock(hidden_dim2, dropout_rate) for _ in range(num_residual_blocks)
         ])
         self.output_layer = nn.Linear(hidden_dim2, output_dim)
-        self.output_probs_layer = nn.Linear(hidden_dim2, 12)
+        self.output_probs_layer = nn.Linear(hidden_dim2, n_gens)
         self.relu = nn.ReLU()
         self.bn1 = nn.BatchNorm1d(hidden_dim1)
         self.bn2 = nn.BatchNorm1d(hidden_dim2)

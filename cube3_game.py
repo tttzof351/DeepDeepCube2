@@ -36,7 +36,7 @@ class Cube3Game:
         if action >= self.direct_action_size:
             return action - self.direct_action_size
         else:
-            return self.direct_action_size + action
+            return action + self.direct_action_size
         
     def tuple_to_id(self, t):
         action = self.name_to_id[t[0]]
