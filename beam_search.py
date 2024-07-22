@@ -131,7 +131,7 @@ class BeamSearch:
         self.processed_states_count += states.shape[0]
         if (self.processed_states_count - self.printed_count > 1_000_000):
             count_millions = np.round(self.processed_states_count / 10**6, 3)
-            print(f"Processed: {count_millions}M")
+            print(f"{self.global_i}) Processed: {count_millions}M")
             self.printed_count = self.processed_states_count
 
 
@@ -171,6 +171,8 @@ class BeamSearch:
         self.candidate_solutions = candidate_solutions
         self.parent_log_values = log_scores
 
+        self.global_i += 1
+
     def search(
         self,
         state: torch.Tensor
@@ -186,6 +188,7 @@ class BeamSearch:
         self.processed_states_count = 0
         self.printed_count = 0
         self.parent_log_values = torch.tensor([0])
+        self.global_i = 0
 
         self.model.eval()
         self.states = state.clone()
@@ -220,7 +223,7 @@ if __name__ == "__main__":
         model=model,
         generators=generators,
         num_steps=100,
-        beam_width=100000,
+        beam_width=100_000,
         alpha=0.0,
         goal_state=goal_state,
         device = "mps"

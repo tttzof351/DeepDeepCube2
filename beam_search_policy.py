@@ -134,8 +134,7 @@ class BeamSearch:
         self.processed_states_count += states.shape[0]
         if (self.processed_states_count - self.printed_count > 1_000_000):
             count_millions = np.round(self.processed_states_count / 10**6, 3)
-            print(f"Processed: {count_millions}M")
-            self.print_shapes()
+            print(f"{self.global_i}) Processed: {count_millions}M")
             self.printed_count = self.processed_states_count
 
 
@@ -230,7 +229,7 @@ class BeamSearch:
         self.neighbors_policy = p # (N_STATES, N_GENS) - ~12 floats for one state
         self.parent_cumulative_policy = scores
 
-        print(f"{self.global_i}) v:", v[:3])
+        # print(f"{self.global_i}) v:", v[:3])
         # print(f"{self.global_i}) s:", scores[:3])
 
         for h in neighbours_hashes.tolist():
