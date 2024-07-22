@@ -42,6 +42,9 @@ class BeamSearch:
         hashed = torch.sum(self.hash_vec * states, dim=1)
         hashed_sorted, idx = torch.sort(hashed)
         mask = torch.cat((torch.tensor([True]), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
+        
+        # count_removed = (mask == False).int().sum()
+        # print(f"{self.global_i}) count_removed:", count_removed)
 
         return idx[mask]
 
@@ -146,6 +149,8 @@ class BeamSearch:
         candidate_solutions = self.expand_canditate_solutions(self.candidate_solutions)        
         neighbors = neighbors.flatten(end_dim=1)
 
+        print(f"{self.global_i}) neighbours_states:", neighbors.shape)
+
         expanded_log_values = self.expand_log_values(self.parent_log_values)
         
         idx_uniq = self.get_unique_states_idx(neighbors)
@@ -171,6 +176,9 @@ class BeamSearch:
         self.candidate_solutions = candidate_solutions
         self.parent_log_values = log_scores
 
+        if self.global_i > 10:
+            # pass
+            exit()
         self.global_i += 1
 
     def search(

@@ -146,7 +146,7 @@ class BeamSearch:
     def update_greedy_step(self):
         ######## ######## ######## ######## ########
 
-        expanded_states = self.states.unsqueeze(dim=1).expand(
+        neighbours_states = self.states.unsqueeze(dim=1).expand(
             self.states.shape[0],
             self.n_gens,
             self.states.shape[1],
@@ -163,10 +163,12 @@ class BeamSearch:
         ) # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
                 
         neighbours_states = torch.gather(
-            input=expanded_states,
+            input=neighbours_states,
             dim=1,
             index=self.generators[expanded_actions, :]
         ) # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+
+        # print(f"{self.global_i}) neighbours_states:", neighbours_states.shape)
 
         neighbors_policy_flatten = self.neighbors_policy.reshape(
             self.neighbors_policy.shape[0] * self.neighbors_policy.shape[1]
@@ -182,25 +184,35 @@ class BeamSearch:
         scores = torch.log(neighbors_policy_flatten) + expanded_parent_cumulative_policy * 0.5 # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
         neighbours_hashes = self.get_hashes(neighbours_states)
-        unique_hahes_mask = [h not in self.processed_states for h in neighbours_hashes.tolist()]
-        unique_hahes_mask = torch.tensor(unique_hahes_mask)
+        # unique_hahes_mask = [h not in self.processed_states for h in neighbours_hashes.tolist()]
+
+        # for i, m in enumerate(unique_hahes_mask):
+        #     if not m:
+        #         print(f"i: {i}, m: {m}; h: {neighbours_hashes.tolist()[i]}")
+        #         print("n_s:", neighbours_states[i, :])
+
+        # unique_hahes_mask = torch.tensor(unique_hahes_mask)
         
-        neighbours_hashes = neighbours_hashes[unique_hahes_mask]
-        expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-        neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-        neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-        scores = scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        # neighbours_hashes = neighbours_hashes[unique_hahes_mask]
+        # expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        # neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        # neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        # expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        # scores = scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
-        hashed_sorted, idx = torch.sort(neighbours_hashes)
+        hashed_sorted, hashed_idx = torch.sort(neighbours_hashes)
         unique_hahes_mask_2 = torch.cat((torch.tensor([True]), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
-        neighbours_hashes = neighbours_hashes[unique_hahes_mask_2]
-        expanded_actions = expanded_actions[unique_hahes_mask_2] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-        neighbours_states = neighbours_states[unique_hahes_mask_2, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-        neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask_2] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask_2] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-        scores = scores[unique_hahes_mask_2] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        hashed_idx = hashed_idx[unique_hahes_mask_2]
+        
+        # count_removed = (unique_hahes_mask_2 == False).int().sum()
+        # print(f"{self.global_i}) count_removed:", count_removed)
 
+        neighbours_hashes = neighbours_hashes[hashed_idx]
+        expanded_actions = expanded_actions[hashed_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        neighbours_states = neighbours_states[hashed_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        neighbors_policy_flatten = neighbors_policy_flatten[hashed_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[hashed_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        scores = scores[hashed_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
         # scores_idx = torch.argsort(scores, descending=True)#[:100_000] # beam width TODO
         
@@ -213,7 +225,7 @@ class BeamSearch:
         
         v, p = self.predict(neighbours_states) # (N_STATES)    
         
-        v_idx = torch.argsort(v, descending=False)[:100_000]
+        v_idx = torch.argsort(v)[:100_000]
         
         expanded_actions = expanded_actions[v_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
         neighbours_states = neighbours_states[v_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
@@ -233,12 +245,12 @@ class BeamSearch:
         # print(f"{self.global_i}) s:", scores[:3])
 
         for h in neighbours_hashes.tolist():
-            self.processed_states.add(h)
-            # pass
+            # self.processed_states.add(h)
+            pass
 
         ######## ######## ######## ######## ########        
 
-        if self.global_i > 5:
+        if self.global_i > 10:
             pass
             # exit()
         self.global_i += 1
