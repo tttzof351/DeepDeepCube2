@@ -233,8 +233,8 @@ class BeamSearch:
         # print(f"{self.global_i}) s:", scores[:3])
 
         for h in neighbours_hashes.tolist():
-            # self.processed_states.add(h)
-            pass
+            self.processed_states.add(h)
+            # pass
 
         ######## ######## ######## ######## ########        
 
