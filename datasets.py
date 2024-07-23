@@ -6,7 +6,7 @@ import time
 from numba import njit, jit, types
 from numba.typed import List
 
-from hyperparams import hp, random_vector_cube3
+from hyperparams import hp
 from cube3_game import Cube3Game
 from utils import array_wyhash
 

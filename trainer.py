@@ -9,8 +9,15 @@ from cube3_game import Cube3Game
 from models import Pilgrim
 from models import count_parameters
 
+from utils import set_seed
+from utils import int_to_human
+from hyperparams import hp
+
+
 # train on 76K items
 def train_nn():
+    set_seed(hp["train_seed"])
+
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
 
     training_dataset = Cube3Dataset(
@@ -21,9 +28,9 @@ def train_nn():
     )
     training_dataloader = torch.utils.data.DataLoader(
         training_dataset, 
-        batch_size=64,
+        batch_size=128,
         shuffle=True, 
-        num_workers=2
+        num_workers=4
     )
     
     model = Pilgrim(
@@ -54,6 +61,7 @@ def train_nn():
 
     best_val_score = float("inf")
     start = time.time()
+    trainset_count = 0
     with accelerator.autocast():
         while True:
             for data in training_dataloader:
@@ -68,29 +76,21 @@ def train_nn():
 
                 actions = reverse_actions(actions, n_gens=game.actions.shape[0])
 
-                # print("actions:", actions.shape, actions.dtype, actions.device)
-                # print("states:", states.shape, states.dtype, states.device)
-                # print("targets:", targets.shape, targets.dtype, states.device)
-                v_out, a_out = model(states)
-
-                # print("a_out:", a_out.shape, a_out.dtype, a_out.device)
-
-                # print("outputs:", outputs.shape, outputs.dtype, states.device)
+                trainset_count += states.shape[0]
+                v_out, policy_out = model(states)
                 
                 mse_loss = mse_loss_function(input=v_out, target=targets)
-                cs_loss = cros_entroy_loss_function(input=a_out, target=actions)
+                cs_loss = cros_entroy_loss_function(input=policy_out, target=actions)
 
                 # loss = mse_loss + cs_loss
-                loss = cs_loss
-                # print("loss:", loss.item())
+                # loss = cs_loss
+                loss = mse_loss
 
                 accelerator.backward(loss)
                 optimizer.step()
 
                 rmse_accum_loss += np.sqrt(mse_loss.item())
                 cs_accum_loss += cs_loss.item()
-                # rmse_accum_loss += np.sqrt(loss.item())
-                # rmse_accum_loss += loss.item()
                 global_i += 1
                 
                 if (global_i % print_count == 0):
@@ -99,13 +99,13 @@ def train_nn():
                     av_rmse_accum_loss = np.round(rmse_accum_loss / print_count, 3)
                     av_cs_accum_loss = np.round(cs_accum_loss / print_count, 3)
 
-                    print(f"{global_i}): rmse={av_rmse_accum_loss}; cross_e={av_cs_accum_loss}, duration={duration} sec")
+                    print(f"{global_i}): rmse={av_rmse_accum_loss}; cross_e={av_cs_accum_loss}, duration={duration} sec; trainset={int_to_human(trainset_count)}")
                     rmse_accum_loss = 0.0
                     cs_accum_loss = 0.0
                     start = time.time()
 
                 if (global_i % val_count == 0):
-                    torch.save(model.state_dict(), "./assets/models/Cube3ResnetModel_policy.pt")
+                    torch.save(model.state_dict(), "./assets/models/Cube3ResnetModel_value.pt")
                     print(f"{global_i}) Saved model!")
 
                     # model.eval()

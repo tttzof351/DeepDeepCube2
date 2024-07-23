@@ -71,4 +71,7 @@ def int_to_human(number):
         return f"{np.round(number / 1_000_000_000, 3)}B"
 
 if __name__ == "__main__":
-    benchmark_catboost_inference()
+    # benchmark_catboost_inference()
+    print(int_to_human(1010120))
+    print(int_to_human(2021))
+    print(int_to_human(10_000_010))
