@@ -27,9 +27,9 @@ def train_nn():
     )
     
     model = Pilgrim(
-        hidden_dim1 = 500, 
-        hidden_dim2  = 300, 
-        num_residual_blocks = 3, 
+        # hidden_dim1 = 500, 
+        # hidden_dim2  = 300, 
+        # num_residual_blocks = 3, 
     )
     print("Count parameters:", count_parameters(model))
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
@@ -80,8 +80,8 @@ def train_nn():
                 mse_loss = mse_loss_function(input=v_out, target=targets)
                 cs_loss = cros_entroy_loss_function(input=a_out, target=actions)
 
-                loss = mse_loss + cs_loss
-                # loss = cs_loss
+                # loss = mse_loss + cs_loss
+                loss = cs_loss
                 # print("loss:", loss.item())
 
                 accelerator.backward(loss)

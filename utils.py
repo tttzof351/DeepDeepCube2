@@ -60,6 +60,15 @@ def benchmark_catboost_inference():
     duration = np.round(1000 * (end - start), 3)
     print(f"duration: {duration} ms")
 
+def int_to_human(number):
+    if number < 1000:
+        return str(number)
+    elif number < 1_000_000:
+        return f"{np.round(number / 1_000, 3)}K"
+    elif number < 1_000_000_000:
+        return f"{np.round(number / 1_000_000, 3)}M"
+    else:
+        return f"{np.round(number / 1_000_000_000, 3)}B"
 
 if __name__ == "__main__":
     benchmark_catboost_inference()

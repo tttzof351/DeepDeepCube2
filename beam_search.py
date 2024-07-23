@@ -230,7 +230,7 @@ if __name__ == "__main__":
     beam_search = BeamSearch(
         model=model,
         generators=generators,
-        num_steps=100,
+        num_steps=100,  
         beam_width=100_000,
         alpha=0.0,
         goal_state=goal_state,
