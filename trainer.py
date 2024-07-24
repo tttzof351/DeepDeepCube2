@@ -36,7 +36,6 @@ def train_nn():
         num_workers=4
     )
 
-
     model = Pilgrim(
         # hidden_dim1 = 500, 
         # hidden_dim2  = 300, 

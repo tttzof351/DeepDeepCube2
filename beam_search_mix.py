@@ -271,7 +271,7 @@ if __name__ == "__main__":
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
     generators = torch.tensor(game.actions, dtype=torch.int64)
 
-    i = 0
+    i = 1
     state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
     solution = deepcube_test['solutions'][i]    
 
@@ -293,7 +293,14 @@ if __name__ == "__main__":
     model = Pilgrim()
     model.to(device)
     # model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel.pt"))
-    model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel_policy.pt"))
+
+    mode = "value"
+    models = {
+        "value": "./assets/models/Cube3ResnetModel_value.pt",
+        "policy": "./assets/models/Cube3ResnetModel_policy.pt"
+    }
+
+    model.load_state_dict(torch.load(models[mode]))
 
     goal_state = torch.arange(0, 54, dtype=torch.int64)
     
@@ -302,12 +309,12 @@ if __name__ == "__main__":
     beam_search = BeamSearchMix(
         model=model,
         generators=generators,
-        num_steps=100,
-        value_beam_width=None,
-        policy_beam_width=100_000,
+        num_steps=100_000_000,
+        value_beam_width=100_000 if mode == "value" else None,
+        policy_beam_width=100_000 if mode == "policy" else None,
         alpha=0.0,
         goal_state=goal_state,
-        verbose=False,
+        verbose=True,
         device=device
     )
     solution, processed_count = beam_search.search(state=state)
