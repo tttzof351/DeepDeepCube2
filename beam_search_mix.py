@@ -39,7 +39,6 @@ class BeamSearchMix:
         self.verbose = verbose
 
         self.model.eval()
-        self.model.to(device)
 
     def get_hashes(self, states: torch.Tensor):
         return torch.sum(self.hash_vec * states, dim=1)
@@ -290,14 +289,16 @@ if __name__ == "__main__":
     # value = values[-1].item()
     # print("value:", value)
 
-
+    device = "mps"
     model = Pilgrim()
+    model.to(device)
     # model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel.pt"))
     model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel_policy.pt"))
 
     goal_state = torch.arange(0, 54, dtype=torch.int64)
     
     start = time.time()
+
     beam_search = BeamSearchMix(
         model=model,
         generators=generators,
@@ -307,7 +308,7 @@ if __name__ == "__main__":
         alpha=0.0,
         goal_state=goal_state,
         verbose=False,
-        device = "mps"
+        device=device
     )
     solution, processed_count = beam_search.search(state=state)
 

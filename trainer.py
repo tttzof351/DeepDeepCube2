@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import time 
 
-from datasets import Cube3Dataset
+from datasets import Cube3Dataset2
 from datasets import reverse_actions
 from cube3_game import Cube3Game
 from models import Pilgrim
@@ -19,20 +19,24 @@ def train_nn():
     set_seed(hp["train_seed"])
 
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
+    state_size = game.actions.shape[1]
+    generators = torch.tensor(game.actions, dtype=torch.int64)
 
-    training_dataset = Cube3Dataset(
-        length=22, 
-        permutations=game.actions, 
-        n=10,
-        size=100
+    training_dataset = Cube3Dataset2(
+        n = hp["cube3_god_number"],
+        N = 10,
+        size = 1_000_000,
+        generators = generators
     )
+    
     training_dataloader = torch.utils.data.DataLoader(
         training_dataset, 
-        batch_size=128,
+        batch_size=4096,
         shuffle=True, 
         num_workers=4
     )
-    
+
+
     model = Pilgrim(
         # hidden_dim1 = 500, 
         # hidden_dim2  = 300, 
@@ -70,7 +74,7 @@ def train_nn():
 
                 states, actions, targets = data
                 
-                states = states.view(-1, 54)
+                states = states.view(-1, state_size)
                 targets = targets.view(-1, 1)
                 actions = actions.view(-1)
 
@@ -134,7 +138,6 @@ def train_nn():
                     #     print(f"Saved model!")
                     # else:
                     #     print(f"Old model is best! val_acc_rmse={val_acc_rmse} > best_val_score={best_val_score}")
-
 
             #     break
             # break
