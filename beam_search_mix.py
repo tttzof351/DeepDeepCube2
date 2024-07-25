@@ -8,7 +8,7 @@ from utils import open_pickle
 
 from cube3_game import Cube3Game
 from models import Pilgrim
-from datasets import get_torch_scrambles
+from datasets import get_torch_scrambles_3
 from utils import set_seed
 
 
@@ -25,17 +25,17 @@ class BeamSearchMix:
         verbose: bool,
         device: torch.device
     ):
+        self.device = device
         self.model = model
         self.num_steps = num_steps
         self.value_beam_width = value_beam_width
         self.policy_beam_width = policy_beam_width
         self.alpha = alpha
-        self.generators = generators
+        self.generators = generators.to(self.device)
         self.n_gens = generators.size(0)
         self.state_size = generators.size(1)
-        self.device = device
-        self.hash_vec = torch.randint(0, 1_000_000_000_000, (self.state_size,))
-        self.goal_state = goal_state
+        self.hash_vec = torch.randint(0, 1_000_000_000_000, (self.state_size,), device=self.device)
+        self.goal_state = goal_state.to(self.device)
         self.verbose = verbose
 
         self.model.eval()
@@ -81,8 +81,8 @@ class BeamSearchMix:
                 print(f"{self.global_i}) Processed: {count_millions}M")
             self.printed_count = self.processed_count
 
-        values = values.cpu()
-        policy = torch.softmax(policy, dim=1).cpu()
+        values = values.to(self.device)#.cpu()
+        policy = torch.softmax(policy, dim=1).to(self.device)#.cpu()
 
         return values, policy
     
@@ -94,7 +94,7 @@ class BeamSearchMix:
         ).reshape(
             self.n_gens * self.states.shape[0],
             self.states.shape[1],
-        ) # (N_STATES * N_GENS, STATE_SIZE) == [S1, S1, ..., SN, SN]
+        ).to(self.device) # (N_STATES * N_GENS, STATE_SIZE) == [S1, S1, ..., SN, SN]
 
         expanded_solution = self.solutions.unsqueeze(dim=1).expand(
             self.solutions.shape[0],
@@ -103,31 +103,31 @@ class BeamSearchMix:
         ).reshape(
             self.n_gens * self.solutions.shape[0],
             self.solutions.shape[1]
-        ) # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+        ).to(self.device) # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
 
         expanded_actions = torch.arange(0, self.n_gens).unsqueeze(dim=0).expand(
             self.states.shape[0],
             self.n_gens
         ).reshape(
             self.states.shape[0] * self.n_gens
-        ) # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        ).to(self.device) # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
                 
         neighbours_states = torch.gather(
             input=neighbours_states,
             dim=1,
             index=self.generators[expanded_actions, :]
-        ) # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        ).to(self.device) # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
 
         neighbors_policy_flatten = self.neighbors_policy.reshape(
             self.neighbors_policy.shape[0] * self.neighbors_policy.shape[1]
-        ) # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        ).to(self.device) # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
 
         expanded_parent_cumulative_policy = self.parent_cumulative_policy.unsqueeze(dim=1).expand(
             self.parent_cumulative_policy.shape[0],
             self.n_gens
         ).reshape(
             self.n_gens * self.parent_cumulative_policy.shape[0]
-        ) # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        ).to(self.device) # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
         
         ###### ###### ###### ######
 
@@ -140,7 +140,7 @@ class BeamSearchMix:
             self.processed_hashes.add(h)
             # pass
 
-        unique_hahes_mask = torch.tensor(unique_hahes_mask)
+        unique_hahes_mask = torch.tensor(unique_hahes_mask, device=self.device)
         
         neighbours_hashes = neighbours_hashes[unique_hahes_mask]
         expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
@@ -151,7 +151,7 @@ class BeamSearchMix:
         policy_scores = policy_scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
         hashed_sorted, hashed_idx = torch.sort(neighbours_hashes)
-        unique_hahes_mask_2 = torch.cat((torch.tensor([True]), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
+        unique_hahes_mask_2 = torch.cat((torch.tensor([True], device=self.device), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
         hashed_idx = hashed_idx[unique_hahes_mask_2]
         
         neighbours_hashes = neighbours_hashes[hashed_idx] # (N_GENS * N_STATES)
@@ -220,7 +220,7 @@ class BeamSearchMix:
             state = state.unsqueeze(0)
 
         self.model.eval()
-        self.states = state.clone() # (N_STATES, STATE_SIZE)
+        self.states = state.clone().to(self.device) # (N_STATES, STATE_SIZE)
         
         ########################################################
         
@@ -239,12 +239,13 @@ class BeamSearchMix:
         self.solutions = torch.full(
             size=[1, 1], # (different solutions, path of action)
             fill_value=-1,
-            dtype=torch.int64
+            dtype=torch.int64,
+            device=self.device
         ) # (N_STATES, N_LENGTH) - one path for each state
 
         # self.solution_lengths = torch.zeros((1)) # (N_STATES) - one float for one state
-        self.parent_cumulative_value = torch.zeros((1)) # (N_STATES) - one float for one state
-        self.parent_cumulative_policy = torch.zeros((1)) # (N_STATES) - one float for one state
+        self.parent_cumulative_value = torch.zeros((1), device=self.device) # (N_STATES) - one float for one state
+        self.parent_cumulative_policy = torch.zeros((1), device=self.device) # (N_STATES) - one float for one state
 
         ########################################################
         
@@ -290,6 +291,7 @@ if __name__ == "__main__":
     # print("value:", value)
 
     device = "mps"
+    # device = "cpu"
     model = Pilgrim()
     model.to(device)
     # model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel.pt"))
@@ -308,7 +310,7 @@ if __name__ == "__main__":
     # 262_144
     beam_search = BeamSearchMix(
         model=model,
-        generators=generators,
+        generators=torch.tensor(game.actions, dtype=torch.int64, device=device),
         num_steps=100_000_000,
         value_beam_width=200_000 if mode == "value" else None,
         policy_beam_width=100_000 if mode == "policy" else None,
