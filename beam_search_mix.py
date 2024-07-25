@@ -305,12 +305,12 @@ if __name__ == "__main__":
     goal_state = torch.arange(0, 54, dtype=torch.int64)
     
     start = time.time()
-
+    # 262_144
     beam_search = BeamSearchMix(
         model=model,
         generators=generators,
         num_steps=100_000_000,
-        value_beam_width=100_000 if mode == "value" else None,
+        value_beam_width=200_000 if mode == "value" else None,
         policy_beam_width=100_000 if mode == "policy" else None,
         alpha=0.0,
         goal_state=goal_state,

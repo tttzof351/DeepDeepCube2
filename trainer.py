@@ -4,7 +4,8 @@ import numpy as np
 import time 
 
 from datasets import Cube3Dataset2
-from datasets import reverse_actions
+from datasets import Cube3Dataset3 
+from datasets import scrambles_collate_fn
 from cube3_game import Cube3Game
 from models import Pilgrim
 from models import count_parameters
@@ -17,23 +18,39 @@ from hyperparams import hp
 # train on 76K items
 def train_nn():
     set_seed(hp["train_seed"])
+    accelerator = Accelerator()
+    device = accelerator.device    
+    print("Accelerator device:", str(device))
 
-    game = Cube3Game("./assets/envs/qtm_cube3.pickle")
-    state_size = game.actions.shape[1]
-    generators = torch.tensor(game.actions, dtype=torch.int64)
+    game = Cube3Game("./assets/envs/qtm_cube3.pickle")    
 
-    training_dataset = Cube3Dataset2(
+    # training_dataset = Cube3Dataset2(
+    #     n = hp["cube3_god_number"],
+    #     N = 10,
+    #     size = 1_000_000,
+    #     generators = torch.tensor(game.actions, dtype=torch.int64),
+    # )
+    # training_dataloader = torch.utils.data.DataLoader(
+    #     training_dataset, 
+    #     batch_size=4096,
+    #     shuffle=True, 
+    #     num_workers=4,
+    #     collate_fn=scrambles_collate_fn
+    # )
+
+    training_dataset = Cube3Dataset3(
         n = hp["cube3_god_number"],
         N = 10,
         size = 1_000_000,
-        generators = generators
+        generators = torch.tensor(game.actions, dtype=torch.int64, device="mps"),
+        device="mps"
     )
-    
     training_dataloader = torch.utils.data.DataLoader(
         training_dataset, 
-        batch_size=4096,
+        batch_size=256,
         shuffle=True, 
-        num_workers=4
+        num_workers=4 if str(device) == "cpu" else 0,
+        collate_fn=scrambles_collate_fn
     )
 
     model = Pilgrim(
@@ -45,16 +62,12 @@ def train_nn():
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     # accelerator = Accelerator(mixed_precision="fp16")
-    accelerator = Accelerator()
-    device = accelerator.device    
     model, optimizer, training_dataloader = accelerator.prepare(
         model, optimizer, training_dataloader
     )
 
     mse_loss_function = torch.nn.MSELoss()
     cros_entroy_loss_function = torch.nn.CrossEntropyLoss()
-
-    print("Accelerator device:", device)
 
     global_i = 0
     rmse_accum_loss = 0.0
@@ -73,12 +86,6 @@ def train_nn():
 
                 states, actions, targets = data
                 
-                states = states.view(-1, state_size)
-                targets = targets.view(-1, 1)
-                actions = actions.view(-1)
-
-                actions = reverse_actions(actions, n_gens=game.actions.shape[0])
-
                 trainset_count += states.shape[0]
                 v_out, policy_out = model(states)
                 
@@ -108,7 +115,7 @@ def train_nn():
                     start = time.time()
 
                 if (global_i % val_count == 0):
-                    torch.save(model.state_dict(), "./assets/models/Cube3ResnetModel_value.pt")
+                    torch.save(model.state_dict(), "./assets/models/Cube3ResnetModel_value_.pt")
                     print(f"{global_i}) Saved model!")
 
                     # model.eval()
