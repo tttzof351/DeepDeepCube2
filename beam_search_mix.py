@@ -67,7 +67,7 @@ class BeamSearchMix:
             end = start + batch_size
             batch = data[start:end].to(self.model_device)
 
-            with accelerator.autocast():
+            with self.accelerator.autocast():
                 with torch.no_grad():
                     batch_values, batch_policy = model(batch)
                     batch_values = batch_values.squeeze(dim=1)
@@ -276,69 +276,84 @@ class BeamSearchMix:
             
         return None, self.processed_count
 
-if __name__ == "__main__":
+def process_deepcube_dataset(
+        mode: str # value, policy, value_policy
+    ):
+    print(f"Mode: {mode}")
     set_seed(0)
     deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
     generators = torch.tensor(game.actions, dtype=torch.int64)
 
-    i = 1
-    state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
-    solution = deepcube_test['solutions'][i]    
+    optimal_lens = []
+    our_lens = []
+    for i in range(1000):
+        state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
+        opt_solution = deepcube_test['solutions'][i]
 
-    print("state:", state.shape)
-    print("solution_len (optimal):", len(solution))
+        print("state:", state.shape)
+        print("solution_len (optimal):", len(opt_solution))
+        optimal_lens.append(len(opt_solution))
 
-    device = "cpu"
-    # model_device = "mps"
-    accelerator = Accelerator(
-        mixed_precision  = "fp16" if torch.cuda.is_available() else None
+        device = "cpu"
+        # model_device = "mps"
+        accelerator = Accelerator(
+            mixed_precision  = "fp16" if torch.cuda.is_available() else None
+        )
+        model_device = accelerator.device
+
+        # device = "cpu"
+        model = Pilgrim()
+        model.to(device)
+
+        # mode = "value"
+
+        models = {
+            "value": "./assets/models/Cube3ResnetModel_value.pt",
+            "policy": "./assets/models/Cube3ResnetModel_policy.pt",
+            "values_policy": "./assets/models/Cube3ResnetModel_value_policy.pt"
+        }
+
+        model.load_state_dict(torch.load(models[mode]))
+
+        goal_state = torch.arange(0, 54, dtype=torch.int64)
+        
+        start = time.time()
+        # 262_144
+        beam_search = BeamSearchMix(
+            model=model,
+            generators=torch.tensor(game.actions, dtype=torch.int64, device=device),
+            num_steps=100_000_000,
+            value_beam_width=200_000 if mode == "value" else None,
+            policy_beam_width=100_000 if mode == "policy" else None,
+            alpha=0.0,
+            goal_state=goal_state,
+            verbose=False,
+            device=device,
+            model_device=model_device,
+            accelerator=accelerator
+        )
+        solution, processed_count = beam_search.search(state=state)
+
+        end = time.time()
+
+        duration = np.round(end - start, 3)
+
+        print(f"{i}) solution_len:", len(solution), "path:", solution)
+        our_lens.append(len(solution))
+        count_millions = np.round(processed_count / 10**6, 3)
+        print(f"{i}) processed_count: {count_millions}M")
+        print(f"{i}) duration: {duration} sec")
+        
+        print(f"{i}) optimum mean:", np.round(np.mean(optimal_lens), 4))
+        print(f"{i}) our mean:", np.round(np.mean(our_lens), 4))
+        print("\n")
+        # s = state.squeeze(0).clone()
+        # for a in solution.tolist():
+        #     s = s[generators[a]]
+
+
+if __name__ == "__main__":
+    process_deepcube_dataset(
+        mode = "value"
     )
-    model_device = accelerator.device
-
-    # device = "cpu"
-    model = Pilgrim()
-    model.to(device)
-
-    mode = "value"
-
-    models = {
-        "value": "./assets/models/Cube3ResnetModel_value.pt",
-        "policy": "./assets/models/Cube3ResnetModel_policy.pt",
-        "values_policy": "./assets/models/Cube3ResnetModel_value_policy.pt"
-    }
-
-    model.load_state_dict(torch.load(models[mode]))
-
-    goal_state = torch.arange(0, 54, dtype=torch.int64)
-    
-    start = time.time()
-    # 262_144
-    beam_search = BeamSearchMix(
-        model=model,
-        generators=torch.tensor(game.actions, dtype=torch.int64, device=device),
-        num_steps=100_000_000,
-        value_beam_width=200_000 if mode == "value" else None,
-        policy_beam_width=100_000 if mode == "policy" else None,
-        alpha=0.0,
-        goal_state=goal_state,
-        verbose=True,
-        device=device,
-        model_device=model_device,
-        accelerator=accelerator
-    )
-    solution, processed_count = beam_search.search(state=state)
-
-    end = time.time()
-
-    duration = np.round(end - start, 3)
-
-    print("solution_len:", len(solution))
-    count_millions = np.round(processed_count / 10**6, 3)
-    print(f"processed_count: {count_millions}M")
-    print(f"duration: {duration} sec")
-    
-    s = state.squeeze(0).clone()
-    for a in solution.tolist():
-        s = s[generators[a]]
-    print("out state is goal?:", (s == goal_state).all().item())
