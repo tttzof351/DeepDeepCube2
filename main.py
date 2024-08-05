@@ -16,7 +16,7 @@ from utils import array_wyhash, set_seed
 from utils import open_pickle, save_pickle
 
 from cube3_game import Cube3Game
-from datasets import get_scramble
+from g_datasets import get_scramble
 from hyperparams import hp
 
 def generate_val_test():

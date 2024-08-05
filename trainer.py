@@ -8,9 +8,8 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import time 
 
-from datasets import Cube3Dataset2
-from datasets import Cube3Dataset3 
-from datasets import scrambles_collate_fn
+from g_datasets import Cube3Dataset3 
+from g_datasets import scrambles_collate_fn
 from cube3_game import Cube3Game
 from models import Pilgrim
 from models import count_parameters

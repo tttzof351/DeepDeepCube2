@@ -10,7 +10,7 @@ from utils import open_pickle
 
 from cube3_game import Cube3Game
 from models import Pilgrim
-from datasets import get_torch_scrambles_3
+from g_datasets import get_torch_scrambles_3
 from utils import set_seed
 
 
