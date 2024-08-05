@@ -277,10 +277,11 @@ class BeamSearchMix:
         return None, self.processed_count
 
 def process_deepcube_dataset(
-        mode: str, # value, policy, value_policy,
+        model_mode: str, # value, policy, value_policy,
+        search_mode: str, # value, policy, value_policy
         count_cubes: int = 100
     ):
-    print(f"Mode: {mode}")
+    print(f"Model mode: {model_mode}; Search mode: {search_mode}")
     set_seed(0)
     deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
@@ -315,7 +316,7 @@ def process_deepcube_dataset(
             "values_policy": "./assets/models/Cube3ResnetModel_value_policy.pt"
         }
 
-        model.load_state_dict(torch.load(models[mode]))
+        model.load_state_dict(torch.load(models[model_mode]))
 
         goal_state = torch.arange(0, 54, dtype=torch.int64)
         
@@ -325,8 +326,8 @@ def process_deepcube_dataset(
             model=model,
             generators=torch.tensor(game.actions, dtype=torch.int64, device=device),
             num_steps=100_000_000,
-            value_beam_width=200_000 if mode == "value" else None,
-            policy_beam_width=100_000 if mode == "policy" else None,
+            value_beam_width=200_000 if search_mode == "value" else None,
+            policy_beam_width=100_000 if search_mode == "policy" else None,
             alpha=0.0,
             goal_state=goal_state,
             verbose=False,
@@ -356,6 +357,7 @@ def process_deepcube_dataset(
 
 if __name__ == "__main__":
     process_deepcube_dataset(
-        mode = "value",
+        model_mode = "value",
+        search_mode = "value",
         count_cubes = 100
     )
