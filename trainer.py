@@ -1,5 +1,10 @@
+import os 
+import sys
+
 from accelerate import Accelerator
+
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import time 
 
@@ -16,27 +21,19 @@ from hyperparams import hp
 
 
 # train on 76K items
-def train_nn():
+def train_nn(
+    mode: str, # value, policy, value_policy
+    trainset_limit = 2_000_000_000
+):
     set_seed(hp["train_seed"])
-    accelerator = Accelerator()
+    accelerator = Accelerator(
+        mixed_precision  = "fp16" if torch.cuda.is_available() else None
+    )
     device = accelerator.device    
+    
     print("Accelerator device:", str(device))
 
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")    
-
-    # training_dataset = Cube3Dataset2(
-    #     n = hp["cube3_god_number"],
-    #     N = 10,
-    #     size = 1_000_000,
-    #     generators = torch.tensor(game.actions, dtype=torch.int64),
-    # )
-    # training_dataloader = torch.utils.data.DataLoader(
-    #     training_dataset, 
-    #     batch_size=4096,
-    #     shuffle=True, 
-    #     num_workers=4,
-    #     collate_fn=scrambles_collate_fn
-    # )
 
     training_dataset = Cube3Dataset3(
         n = hp["cube3_god_number"],
@@ -54,9 +51,10 @@ def train_nn():
     )
 
     model = Pilgrim(
-        # hidden_dim1 = 500, 
-        # hidden_dim2  = 300, 
-        # num_residual_blocks = 3, 
+        # input_dim = 54, 
+        # hidden_dim1 = 5000, 
+        # hidden_dim2 = 1000, 
+        # num_residual_blocks = 4
     )
     print("Count parameters:", count_parameters(model))
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
@@ -76,8 +74,13 @@ def train_nn():
     val_count = 1000
 
     best_val_score = float("inf")
+
+    os.makedirs(f"./assets/logs/{mode}", exist_ok=True)
+    logger = SummaryWriter(f"./assets/logs/{mode}")  
     start = time.time()
     trainset_count = 0
+    stop_train = False
+
     with accelerator.autocast():
         while True:
             for data in training_dataloader:
@@ -92,15 +95,24 @@ def train_nn():
                 mse_loss = mse_loss_function(input=v_out, target=targets)
                 cs_loss = cros_entroy_loss_function(input=policy_out, target=actions)
 
-                # loss = mse_loss + cs_loss
-                # loss = cs_loss
-                loss = mse_loss
+                if mode == "value":
+                    loss = mse_loss
+                elif mode == "policy":
+                    loss = cs_loss
+                elif mode == "value_policy":
+                    loss = mse_loss + cs_loss
+                else:
+                    raise f"Incorreect mode: {mode}"                
 
                 accelerator.backward(loss)
                 optimizer.step()
 
                 rmse_accum_loss += np.sqrt(mse_loss.item())
                 cs_accum_loss += cs_loss.item()
+
+                logger.add_scalar("Loss/rmse", np.sqrt(mse_loss.item()), global_step=global_i)
+                logger.add_scalar("Loss/cross_entropy", cs_loss.item(), global_step=global_i)
+
                 global_i += 1
                 
                 if (global_i % print_count == 0):
@@ -115,38 +127,16 @@ def train_nn():
                     start = time.time()
 
                 if (global_i % val_count == 0):
-                    torch.save(model.state_dict(), "./assets/models/Cube3ResnetModel_value_.pt")
+                    os.makedirs("./assets/models/", exist_ok=True)
+                    torch.save(model.state_dict(), f"./assets/models/Cube3ResnetModel_{mode}_.pt")
                     print(f"{global_i}) Saved model!")
 
-                    # model.eval()
-                    # val_acc_rmse = 0
-                    # val_count_batch = 0               
-                    # with torch.no_grad():
-                    #     for val_data in val_dataloader:
-                    #         val_count_batch += 1
-                    #         val_states, val_targets = val_data
-                    #         val_targets = val_targets.unsqueeze(dim=1)
+                    if trainset_count > trainset_limit:
+                        stop_train = True
+                        break
 
-                    #         # print("val_states:", val_states.shape)
-                    #         # print("val_targets:", val_targets.shape)
-                    #         val_outputs = model(val_states)
-                    #         # print("val_outputs:", val_outputs.shape)
-                    #         val_loss = mse_loss(val_outputs, val_targets)                        
-                    #         val_acc_rmse += np.sqrt(val_loss.item())
-
-                    # val_acc_rmse = np.round(val_acc_rmse / val_count_batch, 4)
-                    # print("==========================")
-                    # print(f"{global_i}): val_rmse={val_acc_rmse}")
-
-                    # if val_acc_rmse < best_val_score:
-                    #     torch.save(model.state_dict(), "./assets/models/Cube3ResnetModel.pt")
-                    #     best_val_score = val_acc_rmse
-                    #     print(f"Saved model!")
-                    # else:
-                    #     print(f"Old model is best! val_acc_rmse={val_acc_rmse} > best_val_score={best_val_score}")
-
-            #     break
-            # break
+            if stop_train:
+                break        
 
 if __name__ == "__main__":
-    train_nn()
+    train_nn(mode = "value")

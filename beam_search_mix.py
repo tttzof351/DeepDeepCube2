@@ -1,5 +1,7 @@
 import time
 
+from accelerate import Accelerator
+
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -23,10 +25,16 @@ class BeamSearchMix:
         generators: torch.Tensor,
         goal_state: torch.Tensor,
         verbose: bool,
-        device: torch.device
+        model_device: torch.device,
+        device: torch.device,
+        accelerator: Accelerator,
     ):
         self.device = device
+        self.model_device = model_device
+        
         self.model = model
+        self.accelerator = accelerator
+
         self.num_steps = num_steps
         self.value_beam_width = value_beam_width
         self.policy_beam_width = policy_beam_width
@@ -38,6 +46,7 @@ class BeamSearchMix:
         self.goal_state = goal_state.to(self.device)
         self.verbose = verbose
 
+        self.model.to(self.model_device)
         self.model.eval()
 
     def get_hashes(self, states: torch.Tensor):
@@ -56,17 +65,18 @@ class BeamSearchMix:
 
         for start in range(0, n_samples, batch_size):
             end = start + batch_size
-            batch = data[start:end].to(device)
+            batch = data[start:end].to(self.model_device)
 
-            with torch.no_grad():
-                batch_values, batch_policy = model(batch)
-                batch_values = batch_values.squeeze(dim=1)
+            with accelerator.autocast():
+                with torch.no_grad():
+                    batch_values, batch_policy = model(batch)
+                    batch_values = batch_values.squeeze(dim=1)
 
-            values.append(batch_values)
-            policies.append(batch_policy)
+                    values.append(batch_values)
+                    policies.append(batch_policy)
 
-        values = torch.cat(values, dim=0)
-        policies = torch.cat(policies, dim=0)
+        values = torch.cat(values, dim=0).to(self.device).detach()
+        policies = torch.cat(policies, dim=0).to(self.device).detach()
         return values, policies
 
     def predict(
@@ -279,27 +289,23 @@ if __name__ == "__main__":
     print("state:", state.shape)
     print("solution_len (optimal):", len(solution))
 
-    # states, actions, values = get_torch_scrambles(
-    #     n = 1,
-    #     space_size = game.space_size,
-    #     action_size = game.action_size,
-    #     length = 20,
-    #     permutations = generators
-    # )
-    # state = states[-1, :]
-    # value = values[-1].item()
-    # print("value:", value)
+    device = "cpu"
+    # model_device = "mps"
+    accelerator = Accelerator(
+        mixed_precision  = "fp16" if torch.cuda.is_available() else None
+    )
+    model_device = accelerator.device
 
-    device = "mps"
     # device = "cpu"
     model = Pilgrim()
     model.to(device)
-    # model.load_state_dict(torch.load("./assets/models/Cube3ResnetModel.pt"))
 
     mode = "value"
+
     models = {
         "value": "./assets/models/Cube3ResnetModel_value.pt",
-        "policy": "./assets/models/Cube3ResnetModel_policy.pt"
+        "policy": "./assets/models/Cube3ResnetModel_policy.pt",
+        "values_policy": "./assets/models/Cube3ResnetModel_value_policy.pt"
     }
 
     model.load_state_dict(torch.load(models[mode]))
@@ -317,7 +323,9 @@ if __name__ == "__main__":
         alpha=0.0,
         goal_state=goal_state,
         verbose=True,
-        device=device
+        device=device,
+        model_device=model_device,
+        accelerator=accelerator
     )
     solution, processed_count = beam_search.search(state=state)
 

@@ -95,7 +95,12 @@ def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 if __name__ == "__main__":
-    model = Pilgrim()
+    model = Pilgrim(
+        input_dim = 54, 
+        hidden_dim1 = 5000, 
+        hidden_dim2 = 1000, 
+        num_residual_blocks = 4
+    ) # 14M params
     model.eval()
     print("No script")
     start = time.time()
@@ -117,5 +122,5 @@ if __name__ == "__main__":
     duration = np.round(end - start, 3)
     print(f"Duration: {duration} sec")
 
-    # print(model)
-    # print(np.round(model.count() / 1000), "K")
+    print(model)
+    print(np.round(count_parameters(model) / 1000), "K")
