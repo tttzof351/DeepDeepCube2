@@ -304,11 +304,12 @@ def process_deepcube_dataset(
         )
         model_device = accelerator.device
 
-        # device = "cpu"
-        model = Pilgrim()
+        model = Pilgrim(
+            hidden_dim1 = 500, 
+            hidden_dim2  = 300, 
+            num_residual_blocks = 3,    
+        )
         model.to(device)
-
-        # mode = "value"
 
         models = {
             "value": "./assets/models/Cube3ResnetModel_value.pt",
