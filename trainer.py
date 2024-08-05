@@ -36,14 +36,14 @@ def train_nn(
 
     training_dataset = Cube3Dataset3(
         n = hp["cube3_god_number"],
-        N = 10,
+        N = 400,
         size = 1_000_000,
         generators = torch.tensor(game.actions, dtype=torch.int64, device=accelerator.device),
         device=accelerator.device
     )
     training_dataloader = torch.utils.data.DataLoader(
         training_dataset, 
-        batch_size=256,
+        batch_size=16,
         shuffle=True, 
         num_workers=4 if str(device) == "cpu" else 0,
         collate_fn=scrambles_collate_fn
