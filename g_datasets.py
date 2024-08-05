@@ -6,6 +6,8 @@ import time
 from numba import njit, jit, types
 from numba.typed import List
 
+from typing import Dict,Tuple,Optional,List
+
 from hyperparams import hp
 from cube3_game import Cube3Game
 from utils import array_wyhash
@@ -89,6 +91,128 @@ def get_torch_scrambles_2(
     
     return states, actions, lengths
 
+# @torch.jit.script
+# def get_torch_scrambles_3(
+#     n: int,        
+#     N: int,
+#     generators: torch.Tensor,
+#     hash_vec: torch.Tensor,
+#     device: torch.device
+# ):
+#     n_gens = generators.shape[0]
+#     state_size = generators.shape[1]
+
+#     states = torch.arange(0, state_size, dtype=torch.int64, device=device).unsqueeze(
+#         dim=0
+#     ).unsqueeze(
+#         dim=0
+#     ).expand(
+#         N, 1, state_size
+#     ) # (N, n=1, STATE_SIZE) == [S1, S1, ..., SN, SN]
+
+#     # hashes = torch.einsum(
+#     #     'NnS,S->Nn', # 
+#     #     states,      #  (N, n=1, STATE_SIZE)
+#     #     hash_vec     #  (STATE_SIZE)
+#     # ) # (N, n) == [HASH(S1), HASH(S1), ..., HASH(SN), HASH(SN)]
+
+#     hashes = torch.mul(
+#         states,      #  (N, n=1, STATE_SIZE)
+#         hash_vec.unsqueeze(
+#             dim=0
+#         ).unsqueeze(
+#             dim=0
+#         ).expand(
+#             N, 
+#             1,
+#             state_size
+#         )
+#     ).sum(dim=2)  
+
+#     i = 0
+#     actions = torch.full(
+#         size=[N, 1], 
+#         fill_value=-1,
+#         dtype=torch.int64,         
+#         device=device
+#     )
+
+#     while i < n:
+#         action = torch.randint(low=0, high=n_gens, size=(N,), device=device)
+#         has_duplicates = True
+        
+#         # new_states: torch.Tensor = torch.tensor(())
+#         new_states = states[:, -1, :]
+#         new_hashes = hashes[:, -1]
+
+#         while has_duplicates:
+#             new_states = torch.gather(
+#                 input=states[:, -1, :],
+#                 dim=1,
+#                 index=generators[action]
+#             )
+            
+#             # new_hashes = torch.einsum('NS,S->N', new_states, hash_vec)
+
+#             new_hashes = torch.mul(
+#                 new_states, # [N, STATE_SIZE]
+#                 hash_vec.unsqueeze(
+#                     dim=0
+#                 ).expand(
+#                     N,
+#                     state_size
+#                 )
+#             ).sum(dim=1) # [N]
+
+#             check_hashes = torch.eq(
+#                 hashes, 
+#                 new_hashes.unsqueeze(dim=1).expand(N, hashes.shape[1])
+#             )
+            
+#             mask_duplicated_actions = check_hashes.any(dim=1)
+#             has_duplicates = mask_duplicated_actions.any().item() == True
+
+#             if has_duplicates:
+#                 # print(f"{i}) Duplicated!")
+#                 updated_actions = torch.randint(low=0, high=n_gens, size=(N,), device=device)
+#                 action[mask_duplicated_actions] = updated_actions[mask_duplicated_actions]
+
+                
+#             # if has_duplicates:
+#             #     print("Duplicated!")
+#             #     continue
+            
+#         states = torch.cat([states, new_states.unsqueeze(dim=1)], dim=1)
+#         hashes = torch.cat([hashes, new_hashes.unsqueeze(dim=1)], dim=1)
+#         actions = torch.cat([actions, action.unsqueeze(dim=1)], dim=1)
+#         # print("actions:", actions.shape)
+
+#         i += 1
+
+#         # print("new_states:", new_states.shape)
+#         # print("new_hashes:", new_hashes.shape)
+#         # print("check_hashes:", check_hashes)
+#         # break
+
+#     lengths = torch.arange(
+#         1, 
+#         n + 1,
+#         dtype=torch.float32,
+#         device=device
+#     ).expand(N, n).clone()
+
+#     states = states[:, 1:, :].reshape(
+#         N * n,
+#         state_size
+#     )
+
+#     actions = actions[:, 1:].reshape(N * n)
+
+#     lengths = lengths.reshape(-1)
+    
+#     return states, actions, lengths
+
+
 @torch.jit.script
 def get_torch_scrambles_3(
     n: int,        
@@ -96,7 +220,7 @@ def get_torch_scrambles_3(
     generators: torch.Tensor,
     hash_vec: torch.Tensor,
     device: torch.device
-):
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     n_gens = generators.shape[0]
     state_size = generators.shape[1]
 
@@ -168,7 +292,7 @@ def get_torch_scrambles_3(
             )
             
             mask_duplicated_actions = check_hashes.any(dim=1)
-            has_duplicates = mask_duplicated_actions.any().item() == True
+            has_duplicates = mask_duplicated_actions.any().int().item() == 1.0
 
             if has_duplicates:
                 # print(f"{i}) Duplicated!")
@@ -311,11 +435,12 @@ if __name__ == "__main__":
     n = 26
     
     start = time.time()
-    scrambles, actions, lengths = get_torch_scrambles_2(
+    scrambles, actions, lengths = get_torch_scrambles_3(
         N=N,
         n=n,
         generators=generators,
-        hash_vec=hash_vec
+        hash_vec=hash_vec,
+        device="cpu"
     )
     end = time.time()
 
