@@ -39,7 +39,7 @@ def train_nn(
         N = 10,
         size = 1_000_000,
         generators = torch.tensor(game.actions, dtype=torch.int64, device=accelerator.device),
-        device="mps"
+        device=accelerator.device
     )
     training_dataloader = torch.utils.data.DataLoader(
         training_dataset, 
