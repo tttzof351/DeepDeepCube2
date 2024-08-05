@@ -277,7 +277,8 @@ class BeamSearchMix:
         return None, self.processed_count
 
 def process_deepcube_dataset(
-        mode: str # value, policy, value_policy
+        mode: str, # value, policy, value_policy,
+        count_cubes: int = 100
     ):
     print(f"Mode: {mode}")
     set_seed(0)
@@ -355,5 +356,6 @@ def process_deepcube_dataset(
 
 if __name__ == "__main__":
     process_deepcube_dataset(
-        mode = "value"
+        mode = "value",
+        count_cubes = 100
     )

@@ -127,7 +127,7 @@ def train_nn(
 
                 if (global_i % val_count == 0):
                     os.makedirs("./assets/models/", exist_ok=True)
-                    torch.save(model.state_dict(), f"./assets/models/Cube3ResnetModel_{mode}_.pt")
+                    torch.save(model.state_dict(), f"./assets/models/Cube3ResnetModel_{mode}.pt")
                     print(f"{global_i}) Saved model!")
 
                     if trainset_count > trainset_limit:
