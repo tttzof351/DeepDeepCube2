@@ -38,7 +38,7 @@ def train_nn(
         n = hp["cube3_god_number"],
         N = 10,
         size = 1_000_000,
-        generators = torch.tensor(game.actions, dtype=torch.int64, device="mps"),
+        generators = torch.tensor(game.actions, dtype=torch.int64, device=accelerator.device),
         device="mps"
     )
     training_dataloader = torch.utils.data.DataLoader(
