@@ -92,7 +92,7 @@ class BeamSearchMix:
             self.printed_count = self.processed_count
 
         values = values.to(self.device)#.cpu()
-        policy = torch.softmax(policy, dim=1).to(self.device)#.cpu()
+        policy = torch.softmax(policy.float(), dim=1).to(self.device)#.cpu()
 
         return values, policy
     
@@ -300,7 +300,7 @@ def process_deepcube_dataset(
         device = "cpu"
         # model_device = "mps"
         accelerator = Accelerator(
-            mixed_precision  = "fp16" if torch.cuda.is_available() else None
+            mixed_precision  = None #"fp16" if torch.cuda.is_available() else None
         )
         model_device = accelerator.device
 
@@ -331,7 +331,7 @@ def process_deepcube_dataset(
             policy_beam_width=100_000 if search_mode == "policy" else None,
             alpha=0.0,
             goal_state=goal_state,
-            verbose=False,
+            verbose=True,
             device=device,
             model_device=model_device,
             accelerator=accelerator

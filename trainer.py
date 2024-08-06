@@ -26,7 +26,7 @@ def train_nn(
 ):
     set_seed(hp["train_seed"])
     accelerator = Accelerator(
-        mixed_precision  = "fp16" if torch.cuda.is_available() else None
+        mixed_precision  = None #"fp16" if torch.cuda.is_available() else None
     )
     device = accelerator.device    
     
@@ -43,7 +43,7 @@ def train_nn(
     )
     training_dataloader = torch.utils.data.DataLoader(
         training_dataset, 
-        batch_size=16,
+        batch_size=32,
         shuffle=True, 
         num_workers=4 if str(device) == "cpu" else 0,
         collate_fn=scrambles_collate_fn
@@ -69,7 +69,7 @@ def train_nn(
     rmse_accum_loss = 0.0
     cs_accum_loss = 0.0
     print_count = 1
-    val_count = 1000
+    val_count = 100
 
     best_val_score = float("inf")
 
