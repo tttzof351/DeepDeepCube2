@@ -53,7 +53,15 @@ def train_nn(
         hidden_dim1 = 500, 
         hidden_dim2  = 300, 
         num_residual_blocks = 3,    
-    )
+    ) # 800K
+
+    # model = Pilgrim(
+    #     input_dim = 54, 
+    #     hidden_dim1 = 5000, 
+    #     hidden_dim2 = 1000, 
+    #     num_residual_blocks = 4 
+    # ) # ~14M
+               
     print("Count parameters:", count_parameters(model))
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
@@ -137,4 +145,4 @@ def train_nn(
                 break        
 
 if __name__ == "__main__":
-    train_nn(mode = "value")
+    train_nn(mode = "policy")

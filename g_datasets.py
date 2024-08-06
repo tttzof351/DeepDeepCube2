@@ -353,7 +353,7 @@ def scrambles_collate_fn(
     actions = actions.view(-1)
     lengths = lengths.view(-1, 1)
 
-    lengths = reverse_actions(lengths, n_gens=n_gens)
+    actions = reverse_actions(actions, n_gens=n_gens)
 
     return states, actions, lengths
 
