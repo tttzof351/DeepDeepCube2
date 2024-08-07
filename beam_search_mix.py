@@ -278,271 +278,268 @@ class BeamSearchMix:
         return None, self.processed_count
 
 
-# class BeamSearchPolicy:
-#     def __init__(
-#         self,
-#         model: torch.nn.Module,
-#         num_steps: int, 
-#         value_beam_width: int,
-#         policy_beam_width: int,
-#         alpha: float,
-#         generators: torch.Tensor,
-#         goal_state: torch.Tensor,
-#         verbose: bool,
-#         model_device: torch.device,
-#         device: torch.device,
-#         accelerator: Accelerator,
-#     ):
-#         self.device = device
-#         self.model_device = model_device
+class BeamSearchPolicy:
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        num_steps: int, 
+        value_beam_width: int,
+        policy_beam_width: int,
+        alpha: float,
+        generators: torch.Tensor,
+        goal_state: torch.Tensor,
+        verbose: bool,
+        model_device: torch.device,
+        device: torch.device,
+        accelerator: Accelerator,
+    ):
+        self.device = device
+        self.model_device = model_device
         
-#         self.model = model
-#         self.accelerator = accelerator
+        self.model = model
+        self.accelerator = accelerator
 
-#         self.num_steps = num_steps
-#         self.value_beam_width = value_beam_width
-#         self.policy_beam_width = policy_beam_width
-#         self.alpha = alpha
-#         self.generators = generators.to(self.device)
-#         self.n_gens = generators.size(0)
-#         self.state_size = generators.size(1)
-#         self.hash_vec = torch.randint(0, 1_000_000_000_000, (self.state_size,), device=self.device)
-#         self.goal_state = goal_state.to(self.device)
-#         self.verbose = verbose
+        self.num_steps = num_steps
+        self.value_beam_width = value_beam_width
+        self.policy_beam_width = policy_beam_width
+        self.alpha = alpha
+        self.generators = generators.to(self.device)
+        self.n_gens = generators.size(0)
+        self.state_size = generators.size(1)
+        self.hash_vec = torch.randint(0, 1_000_000_000_000, (self.state_size,), device=self.device)
+        self.goal_state = goal_state.to(self.device)
+        self.verbose = verbose
 
-#         self.model.to(self.model_device)
-#         self.model.eval()
+        self.model.to(self.model_device)
+        self.model.eval()
 
-#     def get_hashes(self, states: torch.Tensor):
-#         return torch.sum(self.hash_vec * states, dim=1)
+    def get_hashes(self, states: torch.Tensor):
+        return torch.sum(self.hash_vec * states, dim=1)
         
-#     def batch_predict(
-#         self, 
-#         model: torch.nn.Module, 
-#         data: torch.Tensor, 
-#         batch_size: int
-#     ) -> torch.Tensor:        
-#         n_samples = data.shape[0]
-#         values = []
-#         policies = []
+    def batch_predict(
+        self, 
+        model: torch.nn.Module, 
+        data: torch.Tensor, 
+        batch_size: int
+    ) -> torch.Tensor:        
+        n_samples = data.shape[0]
+        values = []
+        policies = []
 
-#         for start in range(0, n_samples, batch_size):
-#             end = start + batch_size
-#             batch = data[start:end].to(self.model_device)
+        for start in range(0, n_samples, batch_size):
+            end = start + batch_size
+            batch = data[start:end].to(self.model_device)
 
-#             with self.accelerator.autocast():
-#                 with torch.no_grad():
-#                     batch_values, batch_policy = model(batch)
-#                     batch_values = batch_values.squeeze(dim=1)
+            with self.accelerator.autocast():
+                with torch.no_grad():
+                    batch_values, batch_policy = model(batch)
+                    batch_values = batch_values.squeeze(dim=1)
 
-#                     values.append(batch_values)
-#                     policies.append(batch_policy)
+                    values.append(batch_values)
+                    policies.append(batch_policy)
 
-#         values = torch.cat(values, dim=0).to(self.device).detach()
-#         policies = torch.cat(policies, dim=0).to(self.device).detach()
-#         return values, policies
+        values = torch.cat(values, dim=0).to(self.device).detach()
+        policies = torch.cat(policies, dim=0).to(self.device).detach()
+        return values, policies
 
-#     def predict(
-#         self, 
-#         states: torch.Tensor
-#     ) -> torch.Tensor:        
-#         values, policy = self.batch_predict(self.model, states, 4096)
-#         self.processed_count += states.shape[0]
-#         if (self.processed_count - self.printed_count > 1_000_000):
-#             count_millions = np.round(self.processed_count / 10**6, 3)
-#             if self.verbose:
-#                 print(f"{self.global_i}) Processed: {count_millions}M")
-#             self.printed_count = self.processed_count
+    def predict(
+        self, 
+        states: torch.Tensor
+    ) -> torch.Tensor:        
+        values, policy = self.batch_predict(self.model, states, 4096)
+        self.processed_count += states.shape[0]
+        if (self.processed_count - self.printed_count > 1_000_000):
+            count_millions = np.round(self.processed_count / 10**6, 3)
+            if self.verbose:
+                print(f"{self.global_i}) Processed: {count_millions}M")
+            self.printed_count = self.processed_count
 
-#         values = values.to(self.device)#.cpu()
-#         policy = torch.softmax(policy.float(), dim=1).to(self.device)#.cpu()
+        values = values.to(self.device)#.cpu()
+        policy = torch.softmax(policy.float(), dim=1).to(self.device)#.cpu()
 
-#         return values, policy
+        return values, policy
     
-#     def update_greedy_step(self):
-#         neighbours_states = self.states.unsqueeze(dim=1).expand(
-#             self.states.shape[0],
-#             self.n_gens,
-#             self.states.shape[1],
-#         ).reshape(
-#             self.n_gens * self.states.shape[0],
-#             self.states.shape[1],
-#         ).to(self.device) # (N_STATES * N_GENS, STATE_SIZE) == [S1, S1, ..., SN, SN]
+    def update_greedy_step(self):
+        neighbours_states = self.states.unsqueeze(dim=1).expand(
+            self.states.shape[0],
+            self.n_gens,
+            self.states.shape[1],
+        ).reshape(
+            self.n_gens * self.states.shape[0],
+            self.states.shape[1],
+        ).to(self.device) # (N_STATES * N_GENS, STATE_SIZE) == [S1, S1, ..., SN, SN]
 
-#         expanded_solution = self.solutions.unsqueeze(dim=1).expand(
-#             self.solutions.shape[0],
-#             self.n_gens, 
-#             self.solutions.shape[1]
-#         ).reshape(
-#             self.n_gens * self.solutions.shape[0],
-#             self.solutions.shape[1]
-#         ).to(self.device) # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+        expanded_solution = self.solutions.unsqueeze(dim=1).expand(
+            self.solutions.shape[0],
+            self.n_gens, 
+            self.solutions.shape[1]
+        ).reshape(
+            self.n_gens * self.solutions.shape[0],
+            self.solutions.shape[1]
+        ).to(self.device) # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
 
-#         expanded_actions = torch.arange(0, self.n_gens).unsqueeze(dim=0).expand(
-#             self.states.shape[0],
-#             self.n_gens
-#         ).reshape(
-#             self.states.shape[0] * self.n_gens
-#         ).to(self.device) # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        expanded_actions = torch.arange(0, self.n_gens).unsqueeze(dim=0).expand(
+            self.states.shape[0],
+            self.n_gens
+        ).reshape(
+            self.states.shape[0] * self.n_gens
+        ).to(self.device) # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
                 
-#         neighbours_states = torch.gather(
-#             input=neighbours_states,
-#             dim=1,
-#             index=self.generators[expanded_actions, :]
-#         ).to(self.device) # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        neighbours_states = torch.gather(
+            input=neighbours_states,
+            dim=1,
+            index=self.generators[expanded_actions, :]
+        ).to(self.device) # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
 
-#         neighbors_policy_flatten = self.neighbors_policy.reshape(
-#             self.neighbors_policy.shape[0] * self.neighbors_policy.shape[1]
-#         ).to(self.device) # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        neighbors_policy_flatten = self.neighbors_policy.reshape(
+            self.neighbors_policy.shape[0] * self.neighbors_policy.shape[1]
+        ).to(self.device) # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
 
-#         expanded_parent_cumulative_policy = self.parent_cumulative_policy.unsqueeze(dim=1).expand(
-#             self.parent_cumulative_policy.shape[0],
-#             self.n_gens
-#         ).reshape(
-#             self.n_gens * self.parent_cumulative_policy.shape[0]
-#         ).to(self.device) # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        expanded_parent_cumulative_policy = self.parent_cumulative_policy.unsqueeze(dim=1).expand(
+            self.parent_cumulative_policy.shape[0],
+            self.n_gens
+        ).reshape(
+            self.n_gens * self.parent_cumulative_policy.shape[0]
+        ).to(self.device) # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
         
-#         ###### ###### ###### ######
+        ###### ###### ###### ######
 
-#         # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
-#         # print("neighbors_policy_flatten:", neighbors_policy_flatten.shape)
-#         # print("expanded_parent_cumulative_policy:", expanded_parent_cumulative_policy.shape)
-#         policy_scores = neighbors_policy_flatten * expanded_parent_cumulative_policy
+        # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        policy_scores = neighbors_policy_flatten * (expanded_parent_cumulative_policy ** 0.9)
 
-#         neighbours_hashes = self.get_hashes(neighbours_states)
-#         unique_hahes_mask = [h not in self.processed_hashes for h in neighbours_hashes.tolist()]
-#         for h in neighbours_hashes.tolist():
-#             self.processed_hashes.add(h)
-#             # pass
+        neighbours_hashes = self.get_hashes(neighbours_states)
+        unique_hahes_mask = [h not in self.processed_hashes for h in neighbours_hashes.tolist()]
+        for h in neighbours_hashes.tolist():
+            self.processed_hashes.add(h)
+            # pass
 
-#         unique_hahes_mask = torch.tensor(unique_hahes_mask, device=self.device)
+        unique_hahes_mask = torch.tensor(unique_hahes_mask, device=self.device)
         
-#         neighbours_hashes = neighbours_hashes[unique_hahes_mask]
-#         expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-#         expanded_solution = expanded_solution[unique_hahes_mask] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
-#         neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-#         neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-#         expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-#         policy_scores = policy_scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        neighbours_hashes = neighbours_hashes[unique_hahes_mask]
+        expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        expanded_solution = expanded_solution[unique_hahes_mask] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+        neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        policy_scores = policy_scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
-#         hashed_sorted, hashed_idx = torch.sort(neighbours_hashes)
-#         unique_hahes_mask_2 = torch.cat((torch.tensor([True], device=self.device), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
-#         hashed_idx = hashed_idx[unique_hahes_mask_2]
+        hashed_sorted, hashed_idx = torch.sort(neighbours_hashes)
+        unique_hahes_mask_2 = torch.cat((torch.tensor([True], device=self.device), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
+        hashed_idx = hashed_idx[unique_hahes_mask_2]
         
-#         neighbours_hashes = neighbours_hashes[hashed_idx] # (N_GENS * N_STATES)
-#         expanded_actions = expanded_actions[hashed_idx] # (N_GENS * N_STATES) == [A1, A2, ..., A1, A2]
-#         expanded_solution = expanded_solution[hashed_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
-#         neighbours_states = neighbours_states[hashed_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-#         neighbors_policy_flatten = neighbors_policy_flatten[hashed_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-#         expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[hashed_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-#         policy_scores = policy_scores[hashed_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        neighbours_hashes = neighbours_hashes[hashed_idx] # (N_GENS * N_STATES)
+        expanded_actions = expanded_actions[hashed_idx] # (N_GENS * N_STATES) == [A1, A2, ..., A1, A2]
+        expanded_solution = expanded_solution[hashed_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+        neighbours_states = neighbours_states[hashed_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        neighbors_policy_flatten = neighbors_policy_flatten[hashed_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[hashed_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        policy_scores = policy_scores[hashed_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
-#         if self.policy_beam_width is not None:
-#             policy_scores_idx = torch.argsort(policy_scores, descending=True)[:self.policy_beam_width] 
+        if self.policy_beam_width is not None:
+            policy_scores_idx = torch.argsort(policy_scores, descending=False)[:self.policy_beam_width] 
 
-#             expanded_actions = expanded_actions[policy_scores_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-#             expanded_solution = expanded_solution[policy_scores_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
-#             neighbours_states = neighbours_states[policy_scores_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-#             neighbors_policy_flatten = neighbors_policy_flatten[policy_scores_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-#             expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-#             policy_scores = policy_scores[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
-#             neighbours_hashes = neighbours_hashes[policy_scores_idx]
+            expanded_actions = expanded_actions[policy_scores_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+            expanded_solution = expanded_solution[policy_scores_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+            neighbours_states = neighbours_states[policy_scores_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+            neighbors_policy_flatten = neighbors_policy_flatten[policy_scores_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+            expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+            policy_scores = policy_scores[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+            neighbours_hashes = neighbours_hashes[policy_scores_idx]
         
-#         v, p = self.predict(neighbours_states) # (N_STATES)    
+        v, p = self.predict(neighbours_states) # (N_STATES)    
         
-#         if self.value_beam_width is not None:
-#             v_idx = torch.argsort(v)[:self.value_beam_width]
+        if self.value_beam_width is not None:
+            v_idx = torch.argsort(v)[:self.value_beam_width]
 
-#             expanded_actions = expanded_actions[v_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-#             expanded_solution = expanded_solution[v_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]            
-#             neighbours_states = neighbours_states[v_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-#             neighbors_policy_flatten = neighbors_policy_flatten[v_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-#             expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[v_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-#             policy_scores = policy_scores[v_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
-#             neighbours_hashes = neighbours_hashes[v_idx]
-#             v = v[v_idx]
-#             p = p[v_idx, :]
+            expanded_actions = expanded_actions[v_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+            expanded_solution = expanded_solution[v_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]            
+            neighbours_states = neighbours_states[v_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+            neighbors_policy_flatten = neighbors_policy_flatten[v_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+            expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[v_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+            policy_scores = policy_scores[v_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+            neighbours_hashes = neighbours_hashes[v_idx]
+            v = v[v_idx]
+            p = p[v_idx, :]
         
-#         self.value = v # (N_STATES) - one value for one state
-#         self.states = neighbours_states  # (N_STATES, STATE_SIZE)
-#         self.neighbors_policy = p # (N_STATES, N_GENS) - ~12 floats for one state
+        self.value = v # (N_STATES) - one value for one state
+        self.states = neighbours_states  # (N_STATES, STATE_SIZE)
+        self.neighbors_policy = p # (N_STATES, N_GENS) - ~12 floats for one state
         
-#         self.solutions = torch.cat([expanded_solution, expanded_actions.unsqueeze(dim=1)], dim=1)
-#         self.parent_cumulative_policy = policy_scores
+        self.solutions = torch.cat([expanded_solution, expanded_actions.unsqueeze(dim=1)], dim=1)
+        self.parent_cumulative_policy = policy_scores
 
-#         if self.verbose:
-#             print(f"{self.global_i}) v:", v[:3], "; policy_s:", policy_scores[:3] )        
+        if self.verbose:
+            print(f"{self.global_i}) v:", v[:3], "; policy_s:", policy_scores[:3] )        
 
-#         ######## ######## ######## ######## ########        
+        ######## ######## ######## ######## ########        
 
-#         self.global_i += 1
+        self.global_i += 1
 
 
-#     def print_shapes(self):
-#         print(f"{self.global_i}) value:", self.value.shape)
-#         print(f"{self.global_i}) neighbors_policy:", self.neighbors_policy.shape)
-#         print(f"{self.global_i}) solutions:", self.solutions.shape)
-#         print(f"{self.global_i}) solution_lengths:", self.solution_lengths.shape)
-#         print(f"{self.global_i}) parent_cumulative_value:", self.parent_cumulative_value.shape)
-#         print(f"{self.global_i}) parent_cumulative_policy:", self.parent_cumulative_policy.shape)
-#         print(f"{self.global_i}) processed_states:", len(self.processed_states))
+    def print_shapes(self):
+        print(f"{self.global_i}) value:", self.value.shape)
+        print(f"{self.global_i}) neighbors_policy:", self.neighbors_policy.shape)
+        print(f"{self.global_i}) solutions:", self.solutions.shape)
+        print(f"{self.global_i}) solution_lengths:", self.solution_lengths.shape)
+        print(f"{self.global_i}) parent_cumulative_value:", self.parent_cumulative_value.shape)
+        print(f"{self.global_i}) parent_cumulative_policy:", self.parent_cumulative_policy.shape)
+        print(f"{self.global_i}) processed_states:", len(self.processed_states))
 
-#     def search(
-#         self,
-#         state: torch.Tensor
-#     ):
-#         if len(state.shape) < 2:
-#             state = state.unsqueeze(0)
+    def search(
+        self,
+        state: torch.Tensor
+    ):
+        if len(state.shape) < 2:
+            state = state.unsqueeze(0)
 
-#         self.model.eval()
-#         self.states = state.clone().to(self.device) # (N_STATES, STATE_SIZE)
+        self.model.eval()
+        self.states = state.clone().to(self.device) # (N_STATES, STATE_SIZE)
         
-#         ########################################################
+        ########################################################
         
-#         self.processed_count = 0
-#         self.printed_count = 0
+        self.processed_count = 0
+        self.printed_count = 0
         
-#         ########################################################
+        ########################################################
 
-#         # self.policy = torch.zeros((1)) # (N_STATES) - one probability for one state
+        # self.policy = torch.zeros((1)) # (N_STATES) - one probability for one state
         
-#         v, p = self.predict(self.states)  
+        v, p = self.predict(self.states)  
         
-#         self.value = v # (N_STATES) - one value for one state
-#         self.neighbors_policy = p # (N_STATES, N_GENS) - ~12 floats for one state
+        self.value = v # (N_STATES) - one value for one state
+        self.neighbors_policy = p # (N_STATES, N_GENS) - ~12 floats for one state
         
-#         self.solutions = torch.full(
-#             size=[1, 1], # (different solutions, path of action)
-#             fill_value=-1,
-#             dtype=torch.int64,
-#             device=self.device
-#         ) # (N_STATES, N_LENGTH) - one path for each state
+        self.solutions = torch.full(
+            size=[1, 1], # (different solutions, path of action)
+            fill_value=-1,
+            dtype=torch.int64,
+            device=self.device
+        ) # (N_STATES, N_LENGTH) - one path for each state
 
-#         # self.solution_lengths = torch.zeros((1)) # (N_STATES) - one float for one state
-#         self.parent_cumulative_value = torch.zeros((1), device=self.device) # (N_STATES) - one float for one state
-#         self.parent_cumulative_policy = torch.zeros((1), device=self.device) # (N_STATES) - one float for one state
+        # self.solution_lengths = torch.zeros((1)) # (N_STATES) - one float for one state
+        self.parent_cumulative_value = torch.zeros((1), device=self.device) # (N_STATES) - one float for one state
+        self.parent_cumulative_policy = torch.ones((1), device=self.device) # (N_STATES) - one float for one state
 
-#         ########################################################
+        ########################################################
         
-#         hashes = self.get_hashes(self.states).tolist()
-#         self.processed_hashes = set()
-#         for h in hashes:
-#             self.processed_hashes.add(h)
+        hashes = self.get_hashes(self.states).tolist()
+        self.processed_hashes = set()
+        for h in hashes:
+            self.processed_hashes.add(h)
 
-#         self.global_i = 0
+        self.global_i = 0
 
-#         for j in range(self.num_steps):
-#             self.update_greedy_step()
-#             search_result = (self.states == self.goal_state).all(dim=1).nonzero(as_tuple=True)[0]
-#             if (len(search_result) > 0):                
-#                 solution_index = search_result.item()
-#                 solution = self.solutions[solution_index, :]
+        for j in range(self.num_steps):
+            self.update_greedy_step()
+            search_result = (self.states == self.goal_state).all(dim=1).nonzero(as_tuple=True)[0]
+            if (len(search_result) > 0):                
+                solution_index = search_result.item()
+                solution = self.solutions[solution_index, :]
 
-#                 print("self.parent_cumulative_policy", self.parent_cumulative_policy[solution_index])
-#                 return solution[1:], self.processed_count
+                print("self.parent_cumulative_policy", self.parent_cumulative_policy[solution_index])
+                return solution[1:], self.processed_count
             
-#         return None, self.processed_count
-
+        return None, self.processed_count
 
 def process_deepcube_dataset(
     model_mode: str, # value, policy, value_policy,
@@ -624,7 +621,7 @@ def process_deepcube_dataset(
         #     s = s[generators[a]]
 
 def test_policy_beam_search():
-    set_seed(42)
+    set_seed(43)
     # deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
     accelerator = Accelerator(mixed_precision  = None)
     
@@ -653,20 +650,20 @@ def test_policy_beam_search():
     ))
 
     goal_state = torch.arange(0, 54, dtype=torch.int64)    
-    beam_search = BeamSearchMix(
+    beam_search = BeamSearchPolicy(
         model=model,
         generators=generators,
         num_steps=1000,
         value_beam_width=None,
         policy_beam_width=200_000,
-        alpha=1.0,
+        alpha=0.9,
         goal_state=goal_state,
         verbose=True,
         device="cpu",
         model_device="mps",
         accelerator=accelerator
     )
-    solution, processed_count = beam_search.search(state=scrambles[6, :])
+    solution, processed_count = beam_search.search(state=scrambles[5, :])
     print("solution:", solution)
 
 

@@ -99,7 +99,7 @@ def train_nn(
                 v_out, policy_out = model(states)
                 
                 mse_loss = mse_loss_function(input=v_out, target=targets)
-                cs_loss = cros_entroy_loss_function(input=policy_out, target=actions)
+                cs_loss = cros_entroy_loss_function(input=policy_out, target=actions.long())
 
                 if mode == "value":
                     loss = mse_loss

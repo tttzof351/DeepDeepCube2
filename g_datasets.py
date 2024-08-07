@@ -341,7 +341,7 @@ def reverse_actions(actions: torch.Tensor, n_gens: int):
 
 def scrambles_collate_fn(
     batch: torch.Tensor,
-    n_gens: int = 3
+    n_gens: int = 12
 ):
     states = torch.cat([b[0] for b in batch], dim=0)
     actions = torch.cat([b[1] for b in batch], dim=0)
@@ -353,7 +353,7 @@ def scrambles_collate_fn(
     actions = actions.view(-1)
     lengths = lengths.view(-1, 1)
 
-    actions = reverse_actions(actions, n_gens=n_gens)
+    actions = reverse_actions(actions, n_gens=n_gens).long()
 
     return states, actions, lengths
 
