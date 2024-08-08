@@ -5,6 +5,7 @@ from accelerate import Accelerator
 import torch
 import torch.nn.functional as F
 import numpy as np
+from tqdm import tqdm
 
 from utils import open_pickle
 
@@ -12,6 +13,7 @@ from cube3_game import Cube3Game
 from models import Pilgrim
 from g_datasets import get_torch_scrambles_3
 from utils import set_seed
+from utils import save_pickle
 
 
 class BeamSearchMix:
@@ -278,6 +280,7 @@ class BeamSearchMix:
         return None, self.processed_count
 
 def process_deepcube_dataset(
+    report_path: str,
     model_mode: str, # value, policy, value_policy,
     search_mode: str, # value, policy, value_policy
     count_cubes: int = 100
@@ -288,37 +291,36 @@ def process_deepcube_dataset(
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
     generators = torch.tensor(game.actions, dtype=torch.int64)
 
+    device = "cpu"
+    # model_device = "mps"
+    accelerator = Accelerator(
+        mixed_precision  = None #"fp16" if torch.cuda.is_available() else None
+    )
+    model_device = accelerator.device
+
+    model = Pilgrim(
+        hidden_dim1 = 500, 
+        hidden_dim2  = 300, 
+        num_residual_blocks = 3,    
+    )
+    model.to(device)
+
+    models = {
+        "value": "./assets/models/Cube3ResnetModel_value.pt",
+        "policy": "./assets/models/Cube3ResnetModel_policy.pt",
+        "value_policy": "./assets/models/Cube3ResnetModel_value_policy.pt"
+    }
+
+    model.load_state_dict(torch.load(models[model_mode], map_location=torch.device('cpu')))    
+
     optimal_lens = []
     our_lens = []
-    for i in range(count_cubes):
+    report = []
+    for i in tqdm(range(count_cubes)):
         state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
         opt_solution = deepcube_test['solutions'][i]
 
-        print("state:", state.shape)
-        print("solution_len (optimal):", len(opt_solution))
         optimal_lens.append(len(opt_solution))
-
-        device = "cpu"
-        # model_device = "mps"
-        accelerator = Accelerator(
-            mixed_precision  = None #"fp16" if torch.cuda.is_available() else None
-        )
-        model_device = accelerator.device
-
-        model = Pilgrim(
-            hidden_dim1 = 500, 
-            hidden_dim2  = 300, 
-            num_residual_blocks = 3,    
-        )
-        model.to(device)
-
-        models = {
-            "value": "./assets/models/Cube3ResnetModel_value.pt",
-            "policy": "./assets/models/Cube3ResnetModel_policy.pt",
-            "values_policy": "./assets/models/Cube3ResnetModel_value_policy.pt"
-        }
-
-        model.load_state_dict(torch.load(models[model_mode]))
 
         goal_state = torch.arange(0, 54, dtype=torch.int64)
         
@@ -332,7 +334,7 @@ def process_deepcube_dataset(
             policy_beam_width=200_000 if search_mode == "policy" else None,
             alpha=0.9 if search_mode == "policy" else 0.0,
             goal_state=goal_state,
-            verbose=True,
+            verbose=False,
             device=device,
             model_device=model_device,
             accelerator=accelerator
@@ -343,6 +345,20 @@ def process_deepcube_dataset(
 
         duration = np.round(end - start, 3)
 
+        record = {
+            "i": i,
+            "state": deepcube_test['states'][i],
+            "duration_sec": duration,
+            "solution_len": len(solution),            
+            "solution": solution,
+            "optimum_len": len(opt_solution),            
+            "optimum": opt_solution,
+            "processed_count": processed_count,
+        }
+
+        print(f"{i}) state:", state.shape)
+        print(f"{i}) optimum_len:", len(opt_solution))
+
         print(f"{i}) solution_len:", len(solution), "path:", solution)
         our_lens.append(len(solution))
         count_millions = np.round(processed_count / 10**6, 3)
@@ -351,64 +367,37 @@ def process_deepcube_dataset(
         
         print(f"{i}) optimum mean:", np.round(np.mean(optimal_lens), 4))
         print(f"{i}) our mean:", np.round(np.mean(our_lens), 4))
+
+        report.append(record)
+
+        save_pickle(report, report_path)
         print("\n")
-        # s = state.squeeze(0).clone()
-        # for a in solution.tolist():
-        #     s = s[generators[a]]
 
-# def test_policy_beam_search():
-#     set_seed(43)
-#     # deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
-#     accelerator = Accelerator(mixed_precision  = None)
-    
-#     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
-#     generators = torch.tensor(game.actions, dtype=torch.int64)
-
-#     state_size = game.actions.shape[1]
-#     hash_vec = torch.randint(0, 1_000_000_000_000, (state_size,))  
-
-#     scrambles, actions, lengths = get_torch_scrambles_3(
-#         N=1,
-#         n=26,
-#         generators=generators,
-#         hash_vec=hash_vec,
-#         device="cpu"
-#     )
-#     print("scrambles:", scrambles.shape)
-
-#     model = Pilgrim(
-#         hidden_dim1 = 500, 
-#         hidden_dim2  = 300, 
-#         num_residual_blocks = 3,    
-#     )
-#     model.load_state_dict(torch.load(
-#         "./assets/models/Cube3ResnetModel_policy.pt"
-#     ))
-
-#     goal_state = torch.arange(0, 54, dtype=torch.int64)    
-#     beam_search = BeamSearchMix(
-#         model=model,
-#         generators=generators,
-#         num_steps=1000,
-#         value_beam_width=None,
-#         policy_beam_width=200_000,
-#         alpha=1.0,
-#         goal_state=goal_state,
-#         verbose=True,
-#         device="cpu",
-#         model_device="mps",
-#         accelerator=accelerator
-#     )
-#     solution, processed_count = beam_search.search(state=scrambles[12, :])
-#     print("solution:", solution)
-
-
-
-if __name__ == "__main__":
-    # test_policy_beam_search()
+if __name__ == "__main__":    
+    process_deepcube_dataset(
+        report_path="./assets/reports/value_2B_800K_search_value.pkl",
+        model_mode = "value",
+        search_mode = "value",
+        count_cubes = 100
+    )
 
     process_deepcube_dataset(
+        report_path="./assets/reports/policy_2B_800K_search_policy.pkl",
         model_mode = "policy",
+        search_mode = "policy",
+        count_cubes = 100
+    )
+
+    process_deepcube_dataset(
+        report_path="./assets/reports/value_policy_2B_800K_search_value.pkl",
+        model_mode = "value_policy",
+        search_mode = "value",
+        count_cubes = 100
+    )    
+
+    process_deepcube_dataset(
+        report_path="./assets/reports/value_policy_2B_800K_search_policy.pkl",
+        model_mode = "value_policy",
         search_mode = "policy",
         count_cubes = 100
     )
