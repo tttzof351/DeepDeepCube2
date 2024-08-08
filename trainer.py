@@ -145,4 +145,4 @@ def train_nn(
                 break        
 
 if __name__ == "__main__":
-    train_nn(mode = "value")
+    train_nn(mode = "value_policy")
