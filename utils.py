@@ -1,5 +1,7 @@
 import os
 
+import time
+
 import torch
 import numpy as np
 import random
@@ -69,6 +71,21 @@ def int_to_human(number):
         return f"{np.round(number / 1_000_000, 3)}M"
     else:
         return f"{np.round(number / 1_000_000_000, 3)}B"
+
+class TimeContext:
+    def __init__(self, msg: str, verbose: bool):
+        self.msg = msg
+        self.verbose = verbose
+
+    def __enter__(self):
+        self.start = time.time()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.end = time.time()
+        duration = np.round(self.end - self.start, 3)
+        if self.verbose:
+            print(f"{self.msg}: {duration} sec")
+
 
 if __name__ == "__main__":
     # benchmark_catboost_inference()

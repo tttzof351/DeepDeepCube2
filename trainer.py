@@ -36,7 +36,25 @@ def train_nn(
     # )
     # device = "cpu" #accelerator.device    
     
-    print("Accelerator device:", str(device))
+    print("Device:", str(device))
+
+    # model = Pilgrim(
+    #     hidden_dim1 = 500, 
+    #     hidden_dim2  = 300, 
+    #     num_residual_blocks = 3,    
+    # ) # 800K
+    # batch_size = 32
+
+    model = Pilgrim(
+        input_dim = 54, 
+        hidden_dim1 = 5000, 
+        hidden_dim2 = 1000, 
+        num_residual_blocks = 4 
+    ) # ~14M
+    batch_size = 16
+
+    model.to(device)
+
 
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")    
 
@@ -49,28 +67,13 @@ def train_nn(
     )
     training_dataloader = torch.utils.data.DataLoader(
         training_dataset, 
-        batch_size=32,
+        batch_size=batch_size,
         shuffle=True, 
         num_workers=4 if str(device) == "cpu" else 0,
         collate_fn=scrambles_collate_fn
     )
-
-    model = Pilgrim(
-        hidden_dim1 = 500, 
-        hidden_dim2  = 300, 
-        num_residual_blocks = 3,    
-    ) # 800K
-
-    model.to(device)
-
-    # model = Pilgrim(
-    #     input_dim = 54, 
-    #     hidden_dim1 = 5000, 
-    #     hidden_dim2 = 1000, 
-    #     num_residual_blocks = 4 
-    # ) # ~14M
                
-    print("Count parameters:", count_parameters(model))
+    print("Count parameters:", int_to_human(count_parameters(model)))
     # base_optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     # optimizer = ScheduleFreeWrapper(
     #     base_optimizer, momentum=0.9, weight_decay_at_y=0.1
@@ -176,6 +179,7 @@ def train_nn(
 if __name__ == "__main__":
     train_nn(
         mode = "value_policy",
-        model_name = "Cube3ResnetModel_value_policy_2",
+        model_name = "Cube3ResnetModel_value_policy_3_8B_14M",
+        trainset_limit = 8_000_000_000,
         device = "cuda"
     )
