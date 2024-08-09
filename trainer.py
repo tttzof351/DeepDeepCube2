@@ -1,6 +1,7 @@
 import os 
 import sys
 
+from contextlib import nullcontext
 import schedulefree
 from schedulefree import ScheduleFreeWrapper
 
@@ -96,36 +97,45 @@ def train_nn(
     start = time.time()
     trainset_count = 0
     stop_train = False
+    
+    use_amp = str(device) == "cuda"
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     while True:
-        for data in training_dataloader:
-            model.train()
-            optimizer.train()                
+        for data in training_dataloader:            
+            with torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp):
+                model.train()
+                optimizer.train()                
+
+                states, actions, targets = data
+                
+                states = states.to(device)
+                actions = actions.to(device)
+                targets = targets.to(device)
+                
+                trainset_count += states.shape[0]
+                v_out, policy_out = model(states)
+                
+                mse_loss = mse_loss_function(input=v_out, target=targets)
+                cs_loss = cros_entroy_loss_function(input=policy_out, target=actions.long())
+
+                if mode == "value":
+                    loss = mse_loss
+                elif mode == "policy":
+                    loss = cs_loss
+                elif mode == "value_policy":
+                    loss = mse_loss + cs_loss
+                else:
+                    raise f"Incorreect mode: {mode}"                
+
+            scaler.scale(loss).backward()
+
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1)
+
+            scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad()
-
-            states, actions, targets = data
-            
-            states = states.to(device)
-            actions = actions.to(device)
-            targets = targets.to(device)
-            
-            trainset_count += states.shape[0]
-            v_out, policy_out = model(states)
-            
-            mse_loss = mse_loss_function(input=v_out, target=targets)
-            cs_loss = cros_entroy_loss_function(input=policy_out, target=actions.long())
-
-            if mode == "value":
-                loss = mse_loss
-            elif mode == "policy":
-                loss = cs_loss
-            elif mode == "value_policy":
-                loss = mse_loss + cs_loss
-            else:
-                raise f"Incorreect mode: {mode}"                
-
-            loss.backward()
-            optimizer.step()
 
             rmse_accum_loss += np.sqrt(mse_loss.item())
             cs_accum_loss += cs_loss.item()
@@ -166,5 +176,6 @@ def train_nn(
 if __name__ == "__main__":
     train_nn(
         mode = "value_policy",
-        model_name = "Cube3ResnetModel_value_policy_2"
+        model_name = "Cube3ResnetModel_value_policy_2",
+        device = "cuda"
     )
