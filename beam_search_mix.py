@@ -350,7 +350,7 @@ def process_deepcube_dataset(
             "state": deepcube_test['states'][i],
             "duration_sec": duration,
             "solution_len": len(solution),            
-            "solution": solution,
+            "solution": solution.detach().tolist(),
             "optimum_len": len(opt_solution),            
             "optimum": opt_solution,
             "processed_count": processed_count,
