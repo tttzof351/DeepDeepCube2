@@ -5,3 +5,4 @@ numba
 pybind11
 accelerate
 tensorboard
+schedulefree

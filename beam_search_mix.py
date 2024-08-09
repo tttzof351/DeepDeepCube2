@@ -83,7 +83,7 @@ class BeamSearchMix:
     def predict(
         self, 
         states: torch.Tensor
-    ) -> torch.Tensor:        
+    ) -> torch.Tensor:
         values, policy = self.batch_predict(self.model, states, 4096)
         self.processed_count += states.shape[0]
         if (self.processed_count - self.printed_count > 1_000_000):
@@ -370,34 +370,36 @@ def process_deepcube_dataset(
 
         report.append(record)
 
-        save_pickle(report, report_path)
+        if report_path is not None:
+            save_pickle(report, report_path)
         print("\n")
 
 if __name__ == "__main__":    
-    process_deepcube_dataset(
-        report_path="./assets/reports/value_2B_800K_search_value.pkl",
-        model_mode = "value",
-        search_mode = "value",
-        count_cubes = 100
-    )
+    # process_deepcube_dataset(
+    #     report_path="./assets/reports/value_2B_800K_search_value.pkl",
+    #     model_mode = "value",
+    #     search_mode = "value",
+    #     count_cubes = 100
+    # )
 
-    process_deepcube_dataset(
-        report_path="./assets/reports/policy_2B_800K_search_policy.pkl",
-        model_mode = "policy",
-        search_mode = "policy",
-        count_cubes = 100
-    )
+    # process_deepcube_dataset(
+    #     report_path="./assets/reports/policy_2B_800K_search_policy.pkl",
+    #     model_mode = "policy",
+    #     search_mode = "policy",
+    #     count_cubes = 100
+    # )
 
-    process_deepcube_dataset(
-        report_path="./assets/reports/value_policy_2B_800K_search_value.pkl",
-        model_mode = "value_policy",
-        search_mode = "value",
-        count_cubes = 100
-    )    
+    # process_deepcube_dataset(
+    #     report_path="./assets/reports/value_policy_2B_800K_search_value.pkl",
+    #     model_mode = "value_policy",
+    #     search_mode = "value",
+    #     count_cubes = 100
+    # )    
 
-    process_deepcube_dataset(
-        report_path="./assets/reports/value_policy_2B_800K_search_policy.pkl",
-        model_mode = "value_policy",
-        search_mode = "policy",
-        count_cubes = 100
-    )
+    # process_deepcube_dataset(
+    #     report_path="./assets/reports/value_policy_2B_800K_search_policy.pkl",
+    #     model_mode = "value_policy",
+    #     search_mode = "policy",
+    #     count_cubes = 100
+    # )
+    pass
