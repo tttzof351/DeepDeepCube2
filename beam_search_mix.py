@@ -149,21 +149,21 @@ class BeamSearchMix:
         with TimeContext(f"{self.global_i}) Calculate hash", self.verbose):
             neighbours_hashes = self.get_hashes(neighbours_states)
 
-        with TimeContext(f"{self.global_i}) Global unique hash:", self.verbose):
-            unique_hahes_mask = [h not in self.processed_hashes for h in neighbours_hashes.tolist()]
-            for h in neighbours_hashes.tolist():
-                self.processed_hashes.add(h)
-                # pass
+        # with TimeContext(f"{self.global_i}) Global unique hash:", self.verbose):
+        #     unique_hahes_mask = [h not in self.processed_hashes for h in neighbours_hashes.tolist()]
+        #     for h in neighbours_hashes.tolist():
+        #         self.processed_hashes.add(h)
+        #         # pass
 
-            unique_hahes_mask = torch.tensor(unique_hahes_mask, device=self.device)
+        #     unique_hahes_mask = torch.tensor(unique_hahes_mask, device=self.device)
             
-            neighbours_hashes = neighbours_hashes[unique_hahes_mask]
-            expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-            expanded_solution = expanded_solution[unique_hahes_mask] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
-            neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-            neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-            expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-            policy_scores = policy_scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        #     neighbours_hashes = neighbours_hashes[unique_hahes_mask]
+        #     expanded_actions = expanded_actions[unique_hahes_mask] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        #     expanded_solution = expanded_solution[unique_hahes_mask] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+        #     neighbours_states = neighbours_states[unique_hahes_mask, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        #     neighbors_policy_flatten = neighbors_policy_flatten[unique_hahes_mask] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        #     expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        #     policy_scores = policy_scores[unique_hahes_mask] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
         with TimeContext(f"{self.global_i}) Double states hash", self.verbose):
             hashed_sorted, hashed_idx = torch.sort(neighbours_hashes)
@@ -293,7 +293,8 @@ def process_deepcube_dataset(
     report_path: str,
     model_path: str,
     search_mode: str, # value, policy, value_policy
-    count_cubes: int = 100,
+    start_cube: int = 0,
+    end_cubes: int = 100,
     verbose: bool = False,
     model_device = "cuda"
 ):
@@ -305,11 +306,17 @@ def process_deepcube_dataset(
 
     device = "cpu"
     # model_device = "mps"
+    # model = Pilgrim(
+    #     hidden_dim1 = 500, 
+    #     hidden_dim2  = 300, 
+    #     num_residual_blocks = 3,    
+    # )
     model = Pilgrim(
-        hidden_dim1 = 500, 
-        hidden_dim2  = 300, 
-        num_residual_blocks = 3,    
-    )
+        input_dim = 54, 
+        hidden_dim1 = 5000, 
+        hidden_dim2 = 1000, 
+        num_residual_blocks = 4 
+    ) # ~14M
     model.to(device)
 
     model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))    
@@ -317,7 +324,7 @@ def process_deepcube_dataset(
     optimal_lens = []
     our_lens = []
     report = []
-    for i in tqdm(range(count_cubes)):
+    for i in tqdm(range(start_cube, end_cubes)):
         state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)
         opt_solution = deepcube_test['solutions'][i]
 
@@ -406,11 +413,11 @@ if __name__ == "__main__":
     # )
 
     process_deepcube_dataset(
-        report_path=None,
-        # model_path="./assets/models/Cube3ResnetModel_value_policy_2.pt",
-        model_path = "./assets/models/Cube3ResnetModel_value_policy.pt",
-        search_mode = "policy",
-        count_cubes = 1,
-        verbose = True,
+        report_path="./assets/reports/Cube3ResnetModel_value_policy_3_8B_14M_search_value_full.pkl",
+        model_path = "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
+        search_mode = "value",
+        start_cube = 0,
+        end_cubes = 1000,
+        verbose = False,
         model_device = "cuda"
     )
