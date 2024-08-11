@@ -6,3 +6,5 @@ pybind11
 accelerate
 tensorboard
 schedulefree
+torcheval
+ipywidgets
