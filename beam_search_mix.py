@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 
+from contextlib import nullcontext
+
 from utils import open_pickle
 
 from cube3_game import Cube3Game
@@ -35,6 +37,7 @@ class BeamSearchMix:
         
         self.model = model
         self.use_amp = str(model_device) == "cuda"
+        print("self.use_amp:", self.use_amp)
 
         self.num_steps = num_steps
         self.value_beam_width = value_beam_width
@@ -49,6 +52,11 @@ class BeamSearchMix:
 
         self.model.to(self.model_device)
         self.model.eval()
+
+        if self.use_amp:
+            self.ctx = torch.autocast(device_type=self.model_device, dtype=torch.float16, enabled=self.use_amp)
+        else:
+            self.ctx = nullcontext()        
 
     def get_hashes(self, states: torch.Tensor):
         return torch.sum(self.hash_vec * states, dim=1)
@@ -67,7 +75,7 @@ class BeamSearchMix:
             end = start + batch_size
             batch = data[start:end].to(self.model_device)
 
-            with torch.autocast(device_type=self.model_device, dtype=torch.float16, enabled=self.use_amp):
+            with self.ctx:
                 with torch.no_grad():
                     batch_values, batch_policy = model(batch)
                     batch_values = batch_values.squeeze(dim=1)
@@ -222,6 +230,9 @@ class BeamSearchMix:
 
         ######## ######## ######## ######## ########        
 
+        if self.verbose:
+            print(f"{self.global_i}) Iter time: {np.round(TimeContext.full_time,3)} sec")
+        TimeContext.full_time = 0.0
         self.global_i += 1
 
 
@@ -412,12 +423,22 @@ if __name__ == "__main__":
     #     count_cubes = 100
     # )
 
+    # process_deepcube_dataset(
+    #     report_path="./assets/reports/Cube3ResnetModel_value_policy_3_8B_14M_search_value_full.pkl",
+    #     model_path = "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
+    #     search_mode = "value",
+    #     start_cube = 0,
+    #     end_cubes = 1000,
+    #     verbose = False,
+    #     model_device = "cuda"
+    # )
+
     process_deepcube_dataset(
-        report_path="./assets/reports/Cube3ResnetModel_value_policy_3_8B_14M_search_value_full.pkl",
+        report_path=None,
         model_path = "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
         search_mode = "value",
         start_cube = 0,
-        end_cubes = 1000,
-        verbose = False,
-        model_device = "cuda"
-    )
+        end_cubes = 1,
+        verbose = True,
+        model_device = "mps"
+    )    

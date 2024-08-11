@@ -73,6 +73,7 @@ def int_to_human(number):
         return f"{np.round(number / 1_000_000_000, 3)}B"
 
 class TimeContext:
+    full_time: float = 0.0
     def __init__(self, msg: str, verbose: bool):
         self.msg = msg
         self.verbose = verbose
@@ -83,6 +84,7 @@ class TimeContext:
     def __exit__(self, exc_type, exc_value, traceback):
         self.end = time.time()
         duration = np.round(self.end - self.start, 3)
+        TimeContext.full_time += duration
         if self.verbose:
             print(f"{self.msg}: {duration} sec")
 
