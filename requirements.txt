@@ -8,3 +8,4 @@ tensorboard
 schedulefree
 torcheval
 ipywidgets
+torch-pruning
