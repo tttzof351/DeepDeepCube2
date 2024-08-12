@@ -18,7 +18,7 @@ from utils import TimeContext
 from utils import int_to_human
 
 
-class BeamSearchMix:
+class BeamSearchMixExp:
     def __init__(
         self,
         model: torch.nn.Module,
@@ -186,34 +186,78 @@ class BeamSearchMix:
             expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[hashed_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
             policy_scores = policy_scores[hashed_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
 
-        if self.policy_beam_width is not None:
-            with TimeContext(f"{self.global_i}) Policy filter", self.verbose):
-                policy_scores_idx = torch.argsort(policy_scores, descending=True)[:self.policy_beam_width] 
+        # if self.policy_beam_width is not None:
+        #     with TimeContext(f"{self.global_i}) Policy filter", self.verbose):
+        #         policy_scores_idx = torch.argsort(policy_scores, descending=True)#[:self.policy_beam_width] 
 
-                expanded_actions = expanded_actions[policy_scores_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-                expanded_solution = expanded_solution[policy_scores_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
-                neighbours_states = neighbours_states[policy_scores_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-                neighbors_policy_flatten = neighbors_policy_flatten[policy_scores_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-                expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-                policy_scores = policy_scores[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
-                # neighbours_hashes = neighbours_hashes[policy_scores_idx]
+        #         expanded_actions = expanded_actions[policy_scores_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+        #         expanded_solution = expanded_solution[policy_scores_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+        #         neighbours_states = neighbours_states[policy_scores_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+        #         neighbors_policy_flatten = neighbors_policy_flatten[policy_scores_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+        #         expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+        #         policy_scores = policy_scores[policy_scores_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+        #         # neighbours_hashes = neighbours_hashes[policy_scores_idx]
         
         with TimeContext(f"{self.global_i}) Inference", self.verbose):
             v, p = self.predict(neighbours_states) # (N_STATES)    
         
         if self.value_beam_width is not None:
-            with TimeContext(f"{self.global_i}) Value filter", self.verbose):
-                v_idx = torch.argsort(v)[:self.value_beam_width]
+            with TimeContext(f"{self.global_i}) Value+Policy filter", self.verbose):                
+                B = 2048
 
-                expanded_actions = expanded_actions[v_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
-                expanded_solution = expanded_solution[v_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]            
-                neighbours_states = neighbours_states[v_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
-                neighbors_policy_flatten = neighbors_policy_flatten[v_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
-                expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[v_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
-                policy_scores = policy_scores[v_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
+                if self.global_i < 5:
+                    B = 20_000
+                elif self.global_i < 10:
+                    B = 100_000
+                elif self.global_i < 15:
+                    B = 200_000
+                else:
+                    B = 50_000
+                
+                # B = int(B / 10)
+                B = 10_000
+
+                v_min = torch.min(v)
+                policy_score_max = torch.max(policy_scores)
+                # v - чем меньше, тем лучше
+                # poilcy_score - чем больше тем лучше
+                # V+P - чем меньше тем лучше
+                
+                # value_policy_score = v + (-policy_scores) * 0.0
+                # value_policy_score = 2.0 * torch.softmax(v, dim=0) + torch.softmax(-policy_scores, dim=0)                 
+                # v_policy_idx = torch.argsort(value_policy_score)[:B]
+                
+                # value_policy_score = torch.softmax(
+                #     -v,
+                #     dim=0
+                # )
+                # v_policy_idx = value_policy_score.multinomial(num_samples=B, replacement=True)#[:B]
+
+                value_policy_score = torch.softmax(
+                    #torch.softmax(-v, dim=0) + torch.softmax(+policy_scores, dim=0) * 0.0,
+                    -v + policy_scores * 0.0,
+                    # policy_scores,
+                    # -v,
+                    dim=0
+                )
+                v_policy_idx = value_policy_score.multinomial(num_samples=B, replacement=True)#[:B]
+
+
+                expanded_actions = expanded_actions[v_policy_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
+                expanded_solution = expanded_solution[v_policy_idx] # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]            
+                neighbours_states = neighbours_states[v_policy_idx, :] # (N_STATES * N_GENS, STATE_SIZE) [A1(S1), A2(S1), ..., AN(SN)]
+                neighbors_policy_flatten = neighbors_policy_flatten[v_policy_idx] # (N_STATES * N_GEN) [POLICY_(A1(S1)), POLICY_(A2(S1)), ..., POLICY_(AN(SN))]
+                expanded_parent_cumulative_policy = expanded_parent_cumulative_policy[v_policy_idx] # (N_GENS * N_STATES) [CUM(S1), CUM(S1), ..., CUM(SN), CUM(SN)]
+                policy_scores = policy_scores[v_policy_idx] # (N_GENS * N_STATES) [CUM(S1) + LOG_POLICY_(A1(S1)), CUM(S1) + LOG_POLICY_(A2(S1)), ..., CUM(SN) + LOG_POLICY_(AN(SN))]
                 # neighbours_hashes = neighbours_hashes[v_idx]
-                v = v[v_idx]
-                p = p[v_idx, :]
+                v = v[v_policy_idx]
+                p = p[v_policy_idx, :]
+                value_policy_score = value_policy_score[v_policy_idx]
+
+                if self.verbose:
+                    print(f"{self.global_i}) P: {policy_scores[:3]}; P_MAX: {np.round(policy_score_max, 5)}")
+                    print(f"{self.global_i}) V: {v[:3]}; V_MIN: {np.round(v_min, 5)}")
+                    print(f"{self.global_i}) V+P: {value_policy_score[:3]}")
         
         self.value = v # (N_STATES) - one value for one state
         self.states = neighbours_states  # (N_STATES, STATE_SIZE)
@@ -292,8 +336,14 @@ class BeamSearchMix:
         for j in range(self.num_steps):
             self.update_greedy_step()
             search_result = (self.states == self.goal_state).all(dim=1).nonzero(as_tuple=True)[0]
-            if (len(search_result) > 0):                
-                solution_index = search_result.item()
+            if (len(search_result) > 0):
+                # if (len(search_result)) > 1:
+                #     for i in range(len(search_result)):
+                #         solution_index = search_result[i].item()
+                #         solution = self.solutions[solution_index, :]
+                #         print("SOL:", solution[1:].detach().tolist())
+
+                solution_index = search_result[0].item()
                 solution = self.solutions[solution_index, :]
 
                 return solution[1:], self.processed_count
@@ -317,12 +367,6 @@ def process_deepcube_dataset(
     generators = torch.tensor(game.actions, dtype=torch.int64)
 
     device = "cpu"
-    # model_device = "mps"
-    # model = Pilgrim(
-    #     hidden_dim1 = 500, 
-    #     hidden_dim2  = 300, 
-    #     num_residual_blocks = 3,    
-    # )
     if is_state_dict_model:
         model = Pilgrim(
             input_dim = 54, 
@@ -349,15 +393,12 @@ def process_deepcube_dataset(
         goal_state = torch.arange(0, 54, dtype=torch.int64)
         
         start = time.time()
-        # 262_144
-        beam_search = BeamSearchMix(
+        beam_search = BeamSearchMixExp(
             model=model,
             generators=torch.tensor(game.actions, dtype=torch.int64, device=device),
             num_steps=1000,
-            # policy_beam_width=100_000,
-            # value_beam_width=1_000,
-            policy_beam_width=200_000 if search_mode == "policy" else None,
-            value_beam_width=200_000 if search_mode == "value" else None,
+            policy_beam_width=-1,
+            value_beam_width=-1,
             alpha=0.9,
             goal_state=goal_state,
             verbose=verbose,
@@ -453,8 +494,8 @@ if __name__ == "__main__":
         model_path = "./assets/models/pruning_finetune_Cube3ResnetModel_value_policy_3_8B_14M.pt",
         search_mode = "value",
         start_cube = 0,
-        end_cubes = 1,
-        verbose = False,
+        end_cubes = 10,
+        verbose = True,
         model_device = "mps",
         is_state_dict_model=False
     )        

@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import int_to_human
 from typing import Dict,Tuple,Optional,List
 
 
@@ -91,10 +92,75 @@ class Pilgrim(nn.Module):
         model = torch.jit.trace(self, torch.randint(low=0, high=54, size=(2, 54)))
         return model
 
+class PilgrimTransformer(nn.Module):
+    def __init__(
+            self,
+            space_size = 54,
+            n_gens = 12,
+            d_model = 256,
+            nhead = 8,
+            num_layers = 4
+        ):
+        super(PilgrimTransformer, self).__init__()
+
+        self.space_size = space_size
+        self.n_gens = n_gens
+        self.d_model = d_model
+        self.nhead = nhead
+        self.num_layers = num_layers
+
+        self.color_devider = int(space_size/6) # 9
+
+        self.encoder_transformer = nn.TransformerEncoder(
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=self.d_model, 
+                nhead=self.nhead,
+                dropout=0.0,
+                batch_first=True, 
+                norm_first=False,
+            ),
+            enable_nested_tensor=True,
+            norm=nn.LayerNorm(self.d_model),
+            num_layers=4
+        )
+
+        self.input_embedding = nn.Embedding(
+            num_embeddings=6, 
+            embedding_dim=self.d_model
+        )
+
+        self.pos_encoding = nn.Embedding(
+            num_embeddings=self.space_size, 
+            embedding_dim=self.d_model
+        )
+
+        self.output_value_layer = nn.Linear(self.d_model * self.space_size, 1)
+        self.output_probs_layer = nn.Linear(self.d_model * self.space_size, self.n_gens)
+
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = (x / self.color_devider).long()
+
+        x = self.input_embedding(x)
+
+        pos_codes = self.pos_encoding(
+            torch.arange(54, device=x.device),            
+        )
+
+        x += pos_codes
+        x = self.encoder_transformer(x)
+        
+        x = x.view(-1, self.d_model * self.space_size)
+        value = self.output_value_layer(x)
+        policy = self.output_probs_layer(x)
+
+        return value, policy
+    
+
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-if __name__ == "__main__":
+def check_pilgrim():
     model = Pilgrim(
         input_dim = 54, 
         hidden_dim1 = 5000, 
@@ -124,3 +190,19 @@ if __name__ == "__main__":
 
     print(model)
     print(np.round(count_parameters(model) / 1000), "K")
+
+
+def check_pilgrim_transformer():
+    model = PilgrimTransformer()
+    print("Count params: ", int_to_human(count_parameters(model)))
+
+    with torch.no_grad():
+        value, policy = model(torch.randint(low=0, high=54, size=(1, 54)))
+
+    print("Value:", value)
+    print("Policy:", policy)
+
+
+if __name__ == "__main__":
+    # check_pilgrim()
+    check_pilgrim_transformer()
