@@ -37,7 +37,7 @@ class BeamSearchMix:
         
         self.model = model
         self.use_amp = str(model_device) == "cuda"
-        print("self.use_amp:", self.use_amp)
+        # print("self.use_amp:", self.use_amp)
 
         self.num_steps = num_steps
         self.value_beam_width = value_beam_width
@@ -307,7 +307,8 @@ def process_deepcube_dataset(
     start_cube: int = 0,
     end_cubes: int = 100,
     verbose: bool = False,
-    model_device = "cuda"
+    model_device = "cuda",
+    is_state_dict_model: bool = True
 ):
     print(f"Search mode: {search_mode}")
     set_seed(0)
@@ -322,15 +323,19 @@ def process_deepcube_dataset(
     #     hidden_dim2  = 300, 
     #     num_residual_blocks = 3,    
     # )
-    model = Pilgrim(
-        input_dim = 54, 
-        hidden_dim1 = 5000, 
-        hidden_dim2 = 1000, 
-        num_residual_blocks = 4 
-    ) # ~14M
-    model.to(device)
-
-    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))    
+    if is_state_dict_model:
+        model = Pilgrim(
+            input_dim = 54, 
+            hidden_dim1 = 5000, 
+            hidden_dim2 = 1000, 
+            num_residual_blocks = 4 
+        ) # ~14M
+        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))    
+        model = model.to(device)
+    else:
+        model = torch.load(model_path)
+        model = model.to(device)
+        # print(model)
 
     optimal_lens = []
     our_lens = []
@@ -433,12 +438,23 @@ if __name__ == "__main__":
     #     model_device = "cuda"
     # )
 
+    # process_deepcube_dataset(
+    #     report_path=None,
+    #     model_path = "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
+    #     search_mode = "value",
+    #     start_cube = 0,
+    #     end_cubes = 1,
+    #     verbose = True,
+    #     model_device = "mps"
+    # )    
+
     process_deepcube_dataset(
-        report_path=None,
-        model_path = "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
+        report_path="./assets/reports/pruning_finetune_Cube3ResnetModel_value_3_8B_14M_search_value_100.pkl",
+        model_path = "./assets/models/pruning_finetune_Cube3ResnetModel_value_3_8B_14M.pt",
         search_mode = "value",
         start_cube = 0,
-        end_cubes = 1,
-        verbose = True,
-        model_device = "mps"
-    )    
+        end_cubes = 100,
+        verbose = False,
+        model_device = "cuda",
+        is_state_dict_model=False
+    )        

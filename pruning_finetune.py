@@ -173,7 +173,7 @@ def pruning_finetune(
             if (global_i % val_count == 0):
                 os.makedirs("./assets/models/", exist_ok=True)
                 
-                torch.save(model_out_path)
+                torch.save(model, model_out_path)
                 print(f"{global_i}) Saved model!")
 
                 if trainset_count > trainset_limit:
@@ -187,9 +187,9 @@ def pruning_finetune(
 if __name__ == "__main__":
     pruning_finetune(
         model_in_path="./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
-        model_out_path="./assets/models/pruning_finetune_Cube3ResnetModel_value_policy_3_8B_14M.pt",
-        logs_out_path="./assets/logs/pruning_finetune_Cube3ResnetModel_value_policy_3_8B_14M",
-        device="cpu",
+        model_out_path="./assets/models/pruning_finetune_Cube3ResnetModel_value_3_8B_14M.pt",
+        logs_out_path="./assets/logs/pruning_finetune_Cube3ResnetModel_value_3_8B_14M",
+        device="cuda",
         trainset_limit=2_000_000_000
     )
         
