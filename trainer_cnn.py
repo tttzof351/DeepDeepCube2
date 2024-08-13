@@ -15,7 +15,7 @@ import time
 from g_datasets import Cube3Dataset3 
 from g_datasets import scrambles_collate_fn
 from cube3_game import Cube3Game
-from models import Pilgrim, PilgrimTransformer, PilgrimSimple, PilgrimCNN
+from models import PilgrimCNN
 from models import count_parameters
 
 from utils import set_seed
@@ -25,25 +25,32 @@ from hyperparams import hp
 
 # train on 76K items
 def train_nn(
-    model: torch.nn.Module,
-    model_path = None,
-    log_path = None,    
-    N = 400,
+    mode: str, # value, policy, value_policy,
+    model_name: str = None,
+    N = 100,
     trainset_limit = 2_000_000_000,
     device = "cpu"
 ):
     set_seed(hp["train_seed"])
+    # accelerator = Accelerator(
+    #     mixed_precision  = None #"fp16" if torch.cuda.is_available() else None
+    # )
+    # device = "cpu" #accelerator.device    
+    
     print("Device:", str(device))
 
     # model = Pilgrim(
-    #     input_dim = 54, 
-    #     hidden_dim1 = 5000, 
-    #     hidden_dim2 = 1000, 
-    #     num_residual_blocks = 4 
-    # ) # ~14M
-    batch_size = 16
+    #     hidden_dim1 = 500, 
+    #     hidden_dim2  = 300, 
+    #     num_residual_blocks = 3,    
+    # ) # 800K
+    # batch_size = 32
+
+    model = PilgrimCNN()
+    batch_size = 4
 
     model.to(device)
+
 
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")    
 
@@ -80,11 +87,11 @@ def train_nn(
 
     best_val_score = float("inf")
 
-    if log_path is not None:        
-        os.makedirs(log_path, exist_ok=True)
-        logger = SummaryWriter(log_path)  
+    os.makedirs(f"./assets/logs/{mode}", exist_ok=True)
+    if model_name is not None:
+        logger = SummaryWriter(f"./assets/logs/{model_name}")  
     else:
-        logger = SummaryWriter(f"/tmp")  
+        logger = SummaryWriter(f"./assets/logs/{mode}")  
     
     start = time.time()
     trainset_count = 0
@@ -93,9 +100,14 @@ def train_nn(
     use_amp = str(device) == "cuda"
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
+    if use_amp:
+        ctx = torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp)
+    else:
+        ctx = nullcontext()
+
     while True:
         for data in training_dataloader:            
-            with torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp):
+            with ctx:
                 model.train()
                 optimizer.train()                
 
@@ -111,15 +123,29 @@ def train_nn(
                 mse_loss = mse_loss_function(input=v_out, target=targets)
                 cs_loss = cros_entroy_loss_function(input=policy_out, target=actions.long())
 
-                loss = mse_loss + cs_loss
+                if mode == "value":
+                    loss = mse_loss
+                elif mode == "policy":
+                    loss = cs_loss
+                elif mode == "value_policy":
+                    loss = mse_loss + cs_loss
+                else:
+                    raise f"Incorreect mode: {mode}"                
 
-            scaler.scale(loss).backward()
+            if use_amp:
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+            else:
+                loss.backward()
 
-            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1)
 
-            scaler.step(optimizer)
-            scaler.update()
+            if use_amp:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+            
             optimizer.zero_grad()
 
             rmse_accum_loss += np.sqrt(mse_loss.item())
@@ -143,9 +169,13 @@ def train_nn(
 
             if (global_i % val_count == 0):
                 os.makedirs("./assets/models/", exist_ok=True)
-                if model_path is not None:
-                    torch.save(model.state_dict(), model_path)                
-                    print(f"{global_i}) Saved model!")
+                if model_name is not None:
+                    model_path = f"./assets/models/{model_name}.pt"
+                else:
+                    model_path = f"./assets/models/Cube3ResnetModel_{mode}.pt"
+                
+                torch.save(model.state_dict(), model_path)
+                print(f"{global_i}) Saved model!")
 
                 if trainset_count > trainset_limit:
                     stop_train = True
@@ -155,32 +185,10 @@ def train_nn(
             break        
 
 if __name__ == "__main__":
-    # model = PilgrimTransformer(
-    #     space_size = 54,
-    #     n_gens = 12,
-    #     d_model = 256,
-    #     nhead = 4,
-    #     num_layers = 4
-    # )
-    # model = torch.compile(model)
-    # N = 1
-
-    # model = Pilgrim(
-    #     input_dim = 54, 
-    #     hidden_dim1 = 5000, 
-    #     hidden_dim2 = 1000, 
-    #     num_residual_blocks = 4 
-    # ) # ~14M    
-    # N = 400
-
-    model = PilgrimCNN()
-    N = 1
-
     train_nn(
-        model = model,
-        model_path = None,
-        log_path = None,
-        N = N,
-        trainset_limit = 8_000_000_000,
+        mode = "value_policy",
+        model_name = "CNN_value_policy",
+        N = 1,
+        trainset_limit = 1_000_000_000,
         device = "cpu"
     )

@@ -46,7 +46,13 @@ def train_nn(
     # ) # 800K
     # batch_size = 32
 
-    model = PilgrimTransformer() # ~14M
+    model = PilgrimTransformer(
+        space_size = 54,
+        n_gens = 12,
+        d_model = 32,
+        nhead = 4,
+        num_layers = 4
+    ) # ~14M
     batch_size = 4
 
     model.to(device)
@@ -82,7 +88,7 @@ def train_nn(
     global_i = 0
     rmse_accum_loss = 0.0
     cs_accum_loss = 0.0
-    print_count = 1
+    print_count = 10
     val_count = 100
 
     best_val_score = float("inf")
@@ -190,5 +196,5 @@ if __name__ == "__main__":
         model_name = "Transformer_value_policy_8B_14M",
         N = 10,
         trainset_limit = 1_000_000_000,
-        device = "cuda"
+        device = "cpu"
     )

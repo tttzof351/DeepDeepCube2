@@ -33,6 +33,52 @@ class ResidualBlock(nn.Module):
         out += residual
         out = self.relu(out)
         return out
+    
+
+class CNNResidualBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels, 
+            out_channels=out_channels, 
+            kernel_size=(3, 3), 
+            padding='same', 
+            bias=False
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU()
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels, 
+            out_channels=out_channels, 
+            kernel_size=(3, 3), 
+            padding='same', 
+            bias=False
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        
+        self.downsample = None
+        if in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(
+                    in_channels, 
+                    out_channels, 
+                    kernel_size=(3, 3), 
+                    padding='same', 
+                    bias=False
+                ),
+                nn.BatchNorm2d(out_channels)
+            )
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        identity = self.downsample(x) if self.downsample else x
+        
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu(x + identity)
+
+        return x
 
 class Pilgrim(nn.Module):
     def __init__(
@@ -121,7 +167,7 @@ class PilgrimTransformer(nn.Module):
             ),
             enable_nested_tensor=True,
             norm=nn.LayerNorm(self.d_model),
-            num_layers=4
+            num_layers=self.num_layers
         )
 
         self.input_embedding = nn.Embedding(
@@ -156,6 +202,100 @@ class PilgrimTransformer(nn.Module):
 
         return value, policy
     
+
+class PilgrimSimple(nn.Module):
+    def __init__(
+        self,
+        space_size = 54,
+        n_gens = 12,
+        d_model = 256,
+        num_layers = 4
+    ):
+        super(PilgrimSimple, self).__init__()
+        self.space_size = space_size
+        self.n_gens = n_gens
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.color_devider = int(space_size/6) # 9
+
+        self.input_linear = nn.Linear(
+            self.space_size,
+            self.d_model
+        )
+
+        self.liear_blocks = nn.ModuleList([
+            # nn.Linear(self.d_model, self.d_model) for _ in range(num_layers)
+            ResidualBlock(self.d_model, dropout_rate=0.0) for _ in range(num_layers)
+        ])
+        self.output_value_layer = nn.Linear(self.d_model, 1)
+        self.output_probs_layer = nn.Linear(self.d_model, self.n_gens)
+
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # x = (x / self.color_devider).float()
+        x = (x / self.color_devider).int() / 6.0
+
+        x = self.input_linear(x)
+        for layer in self.liear_blocks:
+            x = layer(x)
+
+        value = self.output_value_layer(x)
+        probs = self.output_probs_layer(x)
+
+        # print("x:", x.shape)
+
+        return value, probs
+    
+class PilgrimCNN(nn.Module):
+    def __init__(
+        self,
+        edge_size = 3,
+        count_egdegs = 6,
+        n_gens = 12,
+        d_model = 16,
+        num_layers = 4
+    ):
+        super(PilgrimCNN, self).__init__()
+        self.space_size = edge_size * edge_size * count_egdegs
+        self.edge_size = edge_size
+        self.count_egdegs = count_egdegs
+        
+        self.n_gens = n_gens
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.color_devider = int(self.space_size/count_egdegs) # 9
+
+        self.input_cnn = CNNResidualBlock(in_channels=1, out_channels=self.d_model)
+        self.cnn_blocks = nn.ModuleList([
+            # nn.Linear(self.d_model, self.d_model) for _ in range(num_layers)
+            CNNResidualBlock(self.d_model, self.d_model) for _ in range(num_layers)
+        ])        
+
+        self.output_value_layer = nn.Linear(864, 1)
+        self.output_probs_layer = nn.Linear(864, self.n_gens)
+
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = (x / self.color_devider).int() / self.count_egdegs
+        x = x.view(-1, self.edge_size*self.count_egdegs, self.edge_size).transpose(2, 1)
+        x = x.unsqueeze(dim=1) 
+
+        x = self.input_cnn(x)
+        for layer in self.cnn_blocks:
+            x = layer(x)
+
+        x = x.flatten(start_dim=1)
+        # print("x:", x.shape)
+
+        value = self.output_value_layer(x)
+        probs = self.output_probs_layer(x)
+        
+        # print("x:", x.shape)
+
+        return value, probs
+
 
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -202,7 +342,30 @@ def check_pilgrim_transformer():
     print("Value:", value)
     print("Policy:", policy)
 
+def check_pilgrim_simple():
+    model = PilgrimSimple()
+    print("Count params: ", int_to_human(count_parameters(model)))
+
+    with torch.no_grad():
+        value, policy = model(torch.randint(low=0, high=54, size=(1, 54)))
+
+    print("Value:", value)
+    print("Policy:", policy)
+
+def check_pilgrim_cnn():
+    model = PilgrimCNN()
+    print("Count params: ", int_to_human(count_parameters(model)))
+
+    with torch.no_grad():
+        # value, policy = model(torch.randint(low=0, high=54, size=(1, 54)))
+        value, policy = model(torch.arange(0, 54).int().unsqueeze(dim=0))
+
+    print("Value:", value)
+    print("Policy:", policy)
+
 
 if __name__ == "__main__":
     # check_pilgrim()
-    check_pilgrim_transformer()
+    # check_pilgrim_transformer()
+    # check_pilgrim_simple()
+    check_pilgrim_cnn()
