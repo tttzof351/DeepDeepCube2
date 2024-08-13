@@ -35,6 +35,39 @@ class ResidualBlock(nn.Module):
         return out
     
 
+class FFBlock(nn.Module):
+    def __init__(
+        self, 
+        hidden_in_dim: int,
+        hidden_out_dim: int
+    ) -> None:
+        super(FFBlock, self).__init__()
+        self.hidden_in_dim = hidden_in_dim
+        self.hidden_out_dim = hidden_out_dim
+
+        self.ln1 = nn.LayerNorm(hidden_in_dim)
+        self.fc1 = self.xavier(nn.Linear(hidden_in_dim, hidden_out_dim))
+        self.relu = nn.ReLU()
+        self.fc2 = self.xavier(nn.Linear(hidden_out_dim, hidden_out_dim))
+        self.ln2 = nn.LayerNorm(hidden_out_dim)
+
+    def xavier(self, layer):
+        torch.nn.init.xavier_normal_(layer.weight)
+        return layer
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        out = self.ln1(x)        
+        out = self.fc1(out)
+        out = self.relu(out)
+        out = self.ln2(out)        
+        out = self.fc2(out)  
+        if self.hidden_in_dim == self.hidden_out_dim:
+            out += residual
+        out = self.relu(out)
+        return out
+    
+
 class CNNResidualBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
@@ -202,7 +235,6 @@ class PilgrimTransformer(nn.Module):
 
         return value, policy
     
-
 class PilgrimSimple(nn.Module):
     def __init__(
         self,
@@ -296,6 +328,158 @@ class PilgrimCNN(nn.Module):
 
         return value, probs
 
+class PilgrimMLP2(nn.Module):
+    def __init__(
+            self,
+            space_size = 54,
+            n_gens = 12,
+            d_model = 128,
+            nhead = 4,
+            num_layers = 4
+        ):
+        super(PilgrimMLP2, self).__init__()
+
+        self.space_size = space_size
+        self.n_gens = n_gens
+        self.d_model = d_model
+        self.nhead = nhead
+        self.num_layers = num_layers
+
+        self.color_devider = int(space_size/6) # 9
+
+        self.input_embedding = nn.Embedding(
+            num_embeddings=27, 
+            embedding_dim=d_model
+        )
+
+        self.output_value_layer = nn.Linear(self.d_model, 1)
+
+        # self.block_1_1 = FFBlock(hidden_in_dim=self.space_size * d_model, hidden_out_dim=self.d_model   )
+        # self.block_1_2 = FFBlock(hidden_in_dim=self.d_model, hidden_out_dim=self.d_model * 2)
+        # self.block_1_3 = FFBlock(hidden_in_dim=self.d_model * 2,hidden_out_dim=self.d_model * 1)
+
+        self.blocks_1 = nn.ModuleList([
+            FFBlock(self.space_size * d_model, hidden_out_dim=self.d_model),
+            FFBlock(hidden_in_dim=self.d_model, hidden_out_dim=self.d_model * 2),
+            FFBlock(hidden_in_dim=self.d_model * 2,hidden_out_dim=self.d_model * 1)
+        ])
+
+        self.blocks_2 = nn.ModuleList([
+            FFBlock(self.space_size * d_model, hidden_out_dim=self.d_model),
+            FFBlock(hidden_in_dim=self.d_model, hidden_out_dim=self.d_model * 2),
+            FFBlock(hidden_in_dim=self.d_model * 2,hidden_out_dim=self.d_model * 1)
+        ])        
+
+        self.blocks_3 = nn.ModuleList([
+            FFBlock(self.space_size * d_model, hidden_out_dim=self.d_model),
+            FFBlock(hidden_in_dim=self.d_model, hidden_out_dim=self.d_model * 2),
+            FFBlock(hidden_in_dim=self.d_model * 2,hidden_out_dim=self.d_model * 1)
+        ])      
+
+        self.blocks_4 = nn.ModuleList([
+            FFBlock(self.space_size * d_model, hidden_out_dim=self.d_model),
+            FFBlock(hidden_in_dim=self.d_model, hidden_out_dim=self.d_model * 2),
+            FFBlock(hidden_in_dim=self.d_model * 2,hidden_out_dim=self.d_model * 1)
+        ])          
+
+        # self.block_2_1 = FFBlock(
+        #     hidden_in_dim=self.space_size * d_model,
+        #     hidden_out_dim=self.d_model   
+        # )
+
+        # self.block_2_2 = FFBlock(
+        #     hidden_in_dim=self.d_model,
+        #     hidden_out_dim=self.d_model * 2
+        # )
+
+        # self.block_2_3 = FFBlock(
+        #     hidden_in_dim=self.d_model * 2,
+        #     hidden_out_dim=self.d_model * 1
+        # )
+
+        # self.block_3_1 = FFBlock(
+        #     hidden_in_dim=self.space_size * d_model,
+        #     hidden_out_dim=self.d_model   
+        # )
+
+        # self.block_3_2 = FFBlock(
+        #     hidden_in_dim=self.d_model,
+        #     hidden_out_dim=self.d_model * 2
+        # )
+
+        # self.block_3_3 = FFBlock(
+        #     hidden_in_dim=self.d_model * 2,
+        #     hidden_out_dim=self.d_model * 1
+        # )
+
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # x = (x / self.color_devider).long()
+        x = (x / 2.0).long()
+        x = self.input_embedding(x)
+        x = x.flatten(start_dim=1)
+
+        # x_1 = (self.block_1_1(x) + self.block_1_2(x) + self.block_1_2(x)) / 3.0
+        # x_2 = (self.block_2_1(x) + self.block_2_2(x) + self.block_2_3(x)) / 3.0
+
+        # value = (self.output_value_layer(x_1) + self.output_value_layer(x_2)) / 2.0
+        # policy = (self.output_probs_layer(x_1) + self.output_probs_layer(x_2)) / 2.0
+
+
+        # x_1 = self.block_1_1(x)
+        # x_1 = self.block_1_2(x_1)
+        # x_1 = self.block_1_3(x_1)
+
+        # x_2 = self.block_2_1(x)
+        # x_2 = self.block_2_2(x_2)
+        # x_2 = self.block_2_3(x_2)        
+
+        # x_3 = self.block_3_1(x)
+        # x_3 = self.block_3_2(x_3)
+        # x_3 = self.block_3_3(x_3)        
+
+        x_1 = x
+        for layer in self.blocks_1:
+            x_1 = layer(x_1)
+
+        x_2 = x
+        for layer in self.blocks_2:
+            x_2 = layer(x_2)
+
+        x_3 = x
+        for layer in self.blocks_3:
+            x_3 = layer(x_3)            
+
+        x_4 = x
+        for layer in self.blocks_4:
+            x_4 = layer(x_4)            
+
+        v_1 = self.output_value_layer(x_1)
+        v_2 = self.output_value_layer(x_2)
+        v_3 = self.output_value_layer(x_3)
+        v_4 = self.output_value_layer(x_4)
+        
+        # print(f"v_1: {v_1[-1].item()}; v_2: {v_2[-1].item()}; v_3: {v_3[-1].item()}")
+        # value = (v_1 + v_2 + v_3) / 3.0
+
+        # vs = torch.cat([v_1, v_2, v_3], dim=1)
+        # value, _ = torch.max(vs, dim=1)
+        # value = value.unsqueeze(dim=1)
+
+        vs = torch.cat([v_1, v_2, v_3, v_4], dim=1)
+        value = torch.mean(vs, dim=1)
+        value = value.unsqueeze(dim=1)
+
+        # print(f"value: {value.shape}")
+        # value = torch.mean(vs, dim=0)
+
+        # print(f"value: {value.shape}")
+        
+        # policy = (
+        #     self.output_probs_layer(x_1) + self.output_probs_layer(x_2) + self.output_probs_layer(x_3)
+        # ) / 3.0
+
+        return value, None
 
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -363,9 +547,20 @@ def check_pilgrim_cnn():
     print("Value:", value)
     print("Policy:", policy)
 
+def check_pilgrim_mlp2():
+    model = PilgrimMLP2()
+    print("Count params: ", int_to_human(count_parameters(model)))
+
+    with torch.no_grad():
+        value, policy = model(torch.randint(low=0, high=54, size=(1, 54)))
+
+    print("Value:", value)
+    print("Policy:", policy)
+
 
 if __name__ == "__main__":
     # check_pilgrim()
     # check_pilgrim_transformer()
     # check_pilgrim_simple()
-    check_pilgrim_cnn()
+    # check_pilgrim_cnn()
+    check_pilgrim_mlp2()

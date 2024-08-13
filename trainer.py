@@ -15,7 +15,7 @@ import time
 from g_datasets import Cube3Dataset3 
 from g_datasets import scrambles_collate_fn
 from cube3_game import Cube3Game
-from models import Pilgrim, PilgrimTransformer, PilgrimSimple, PilgrimCNN
+from models import Pilgrim, PilgrimTransformer, PilgrimSimple, PilgrimCNN, PilgrimMLP2
 from models import count_parameters
 
 from utils import set_seed
@@ -76,7 +76,7 @@ def train_nn(
     rmse_accum_loss = 0.0
     cs_accum_loss = 0.0
     print_count = 10
-    val_count = 100
+    val_count = 1000
 
     best_val_score = float("inf")
 
@@ -109,9 +109,9 @@ def train_nn(
                 v_out, policy_out = model(states)
                 
                 mse_loss = mse_loss_function(input=v_out, target=targets)
-                cs_loss = cros_entroy_loss_function(input=policy_out, target=actions.long())
+                cs_loss = torch.tensor(-1.0)#cros_entroy_loss_function(input=policy_out, target=actions.long())
 
-                loss = mse_loss + cs_loss
+                loss = mse_loss #+ cs_loss
 
             scaler.scale(loss).backward()
 
@@ -173,14 +173,17 @@ if __name__ == "__main__":
     # ) # ~14M    
     # N = 400
 
-    model = PilgrimCNN()
-    N = 1
+    # model = PilgrimCNN()
+    # N = 1
+
+    model = PilgrimMLP2()
+    N = 10
 
     train_nn(
         model = model,
-        model_path = None,
-        log_path = None,
+        model_path = "./assets/models/mlp2_value.pt",
+        log_path = "./assets/logs/mlp2_value",
         N = N,
-        trainset_limit = 8_000_000_000,
+        trainset_limit = 4_000_000_000,
         device = "cpu"
     )
