@@ -46,7 +46,7 @@ def train_nn(
     # batch_size = 32
 
     model = PilgrimTransformer() # ~14M
-    batch_size = 2
+    batch_size = 4
 
     model.to(device)
 
@@ -187,6 +187,6 @@ if __name__ == "__main__":
     train_nn(
         mode = "value_policy",
         model_name = "Transformer_value_policy_8B_14M",
-        trainset_limit = 8_000_000_000,
-        device = "cpu"
+        trainset_limit = 1_000_000_000,
+        device = "cuda"
     )

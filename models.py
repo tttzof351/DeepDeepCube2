@@ -97,8 +97,8 @@ class PilgrimTransformer(nn.Module):
             self,
             space_size = 54,
             n_gens = 12,
-            d_model = 256,
-            nhead = 8,
+            d_model = 64,
+            nhead = 4,
             num_layers = 4
         ):
         super(PilgrimTransformer, self).__init__()
