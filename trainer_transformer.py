@@ -27,6 +27,7 @@ from hyperparams import hp
 def train_nn(
     mode: str, # value, policy, value_policy,
     model_name: str = None,
+    N = 100,
     trainset_limit = 2_000_000_000,
     device = "cpu"
 ):
@@ -55,7 +56,7 @@ def train_nn(
 
     training_dataset = Cube3Dataset3(
         n = hp["cube3_god_number"],
-        N = 100,
+        N = N,
         size = 1_000_000,
         generators = torch.tensor(game.actions, dtype=torch.int64, device=device),
         device=device
@@ -187,6 +188,7 @@ if __name__ == "__main__":
     train_nn(
         mode = "value_policy",
         model_name = "Transformer_value_policy_8B_14M",
+        N = 10,
         trainset_limit = 1_000_000_000,
         device = "cuda"
     )
