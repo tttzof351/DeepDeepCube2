@@ -8,9 +8,10 @@ from tqdm import tqdm
 from contextlib import nullcontext
 
 from utils import open_pickle
+from typing import Optional
 
 from cube3_game import Cube3Game
-from models import Pilgrim
+from models import Pilgrim, PilgrimTransformer, PilgrimSimple, PilgrimCNN, PilgrimMLP2
 from g_datasets import get_torch_scrambles_3
 from utils import set_seed
 from utils import save_pickle
@@ -301,6 +302,7 @@ class BeamSearchMix:
         return None, self.processed_count
 
 def process_deepcube_dataset(
+    model: Optional[torch.nn.Module],
     report_path: str,
     model_path: str,
     search_mode: str, # value, policy, value_policy
@@ -323,19 +325,23 @@ def process_deepcube_dataset(
     #     hidden_dim2  = 300, 
     #     num_residual_blocks = 3,    
     # )
-    if is_state_dict_model:
-        model = Pilgrim(
-            input_dim = 54, 
-            hidden_dim1 = 5000, 
-            hidden_dim2 = 1000, 
-            num_residual_blocks = 4 
-        ) # ~14M
-        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))    
-        model = model.to(device)
+
+    if model is None:
+        if is_state_dict_model:
+            model = Pilgrim(
+                input_dim = 54, 
+                hidden_dim1 = 5000, 
+                hidden_dim2 = 1000, 
+                num_residual_blocks = 4 
+            ) # ~14M
+            model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+            model = model.to(device)
+        else:
+            model = torch.load(model_path, map_location=model_device)
+            model = model.to(model_device)
+            # print(model)
     else:
-        model = torch.load(model_path, map_location=model_device)
         model = model.to(model_device)
-        # print(model)
 
     optimal_lens = []
     our_lens = []
@@ -446,15 +452,25 @@ if __name__ == "__main__":
     #     end_cubes = 1,
     #     verbose = True,
     #     model_device = "mps"
-    # )    
+    # )
+
+    model = PilgrimMLP2()
+    
+    model.load_state_dict(
+        torch.load(
+            "./assets/models/mlp2_value.pt",
+            map_location=torch.device('cpu')
+        )
+    )
 
     process_deepcube_dataset(
+        model = model,
         report_path=None,
-        model_path = "./assets/models/pruning_finetune_Cube3ResnetModel_value_policy_3_8B_14M.pt",
+        model_path = None,
         search_mode = "value",
         start_cube = 0,
         end_cubes = 1,
-        verbose = False,
+        verbose = True,
         model_device = "mps",
         is_state_dict_model=False
     )        

@@ -479,7 +479,7 @@ class PilgrimMLP2(nn.Module):
         #     self.output_probs_layer(x_1) + self.output_probs_layer(x_2) + self.output_probs_layer(x_3)
         # ) / 3.0
 
-        return value, None
+        return value, torch.zeros((value.shape[0], self.n_gens))
 
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
