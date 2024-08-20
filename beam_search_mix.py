@@ -236,7 +236,6 @@ class BeamSearchMix:
         TimeContext.full_time = 0.0
         self.global_i += 1
 
-
     def print_shapes(self):
         print(f"{self.global_i}) value:", self.value.shape)
         print(f"{self.global_i}) neighbors_policy:", self.neighbors_policy.shape)
