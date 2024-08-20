@@ -88,6 +88,13 @@ class TimeContext:
         if self.verbose:
             print(f"{self.msg}: {duration} sec")
 
+def inverse_permutation(perm):
+    inverse = [0] * len(perm)
+    
+    for i, p in enumerate(perm):
+        inverse[p] = i
+    
+    return inverse
 
 if __name__ == "__main__":
     # benchmark_catboost_inference()

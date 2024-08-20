@@ -459,25 +459,17 @@ class PilgrimMLP2(nn.Module):
         v_3 = self.output_value_layer(x_3)
         v_4 = self.output_value_layer(x_4)
         
-        # print(f"v_1: {v_1[-1].item()}; v_2: {v_2[-1].item()}; v_3: {v_3[-1].item()}")
-        # value = (v_1 + v_2 + v_3) / 3.0
-
-        # vs = torch.cat([v_1, v_2, v_3], dim=1)
-        # value, _ = torch.max(vs, dim=1)
-        # value = value.unsqueeze(dim=1)
-
         vs = torch.cat([v_1, v_2, v_3, v_4], dim=1)
-        value = torch.mean(vs, dim=1)
+
+        value, _ = torch.median(vs, dim=1)
+        print("Value median:", value)
         value = value.unsqueeze(dim=1)
 
-        # print(f"value: {value.shape}")
-        # value = torch.mean(vs, dim=0)
+        # value = torch.mean(vs, dim=1)
+        # value = value.unsqueeze(dim=1)
 
-        # print(f"value: {value.shape}")
-        
-        # policy = (
-        #     self.output_probs_layer(x_1) + self.output_probs_layer(x_2) + self.output_probs_layer(x_3)
-        # ) / 3.0
+        # value, _ = torch.min(vs, dim=1)
+        # value = value.unsqueeze(dim=1)
 
         return value, torch.zeros((value.shape[0], self.n_gens))
 
