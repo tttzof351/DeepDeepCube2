@@ -23,7 +23,7 @@ class AStarVector:
         num_steps: int, 
         b_exp: int,
         b_keep: int,
-        alpha: float,
+        temperature: float,
         generators: torch.Tensor,
         goal_state: torch.Tensor,
         verbose: bool,
@@ -36,11 +36,10 @@ class AStarVector:
         self.model = model
         self.use_amp = str(model_device) == "cuda"
         
-
         self.num_steps = num_steps
         self.b_exp = b_exp
         self.b_keep = b_keep
-        self.alpha = alpha
+        self.temperature = temperature
         self.generators = generators.to(self.device)
         self.n_gens = generators.size(0)
         self.state_size = generators.size(1)
@@ -58,7 +57,7 @@ class AStarVector:
             self.ctx = nullcontext()        
 
     def get_hashes(self, states: torch.Tensor):
-        return torch.sum(self.hash_vec * states, dim=1)
+        return torch.sum(self.hash_vec * states.int(), dim=1)
 
     def batch_predict(
         self, 
@@ -102,9 +101,22 @@ class AStarVector:
         # print("h:", self.h)
         # print("g:", self.g)
 
-        f = self.h + self.g
+        f = self.h + self.g * 1.0
         
-        sorted_f_ids = torch.argsort(f, descending=False)
+        if self.temperature > 0.0:
+            # print("SOFTMAX!")
+            f_prob = torch.softmax(-f.double() / self.temperature, dim=0)
+
+            B = self.b_exp + self.b_keep
+            if f_prob.shape[0] < B:
+                B = f_prob.shape[0]
+            sorted_f_ids = f_prob.multinomial(num_samples=B, replacement=False)
+
+        else:
+            sorted_f_ids = torch.argsort(f, descending=False)
+        
+        # print(f"{self.global_i}) sorted_f_ids_canonical: {sorted_f_ids_canonical[:3]}; prob: {f_prob[sorted_f_ids_canonical[:3]]}")
+        # print(f"{self.global_i}) sorted_f_ids: {sorted_f_ids[:3]}; prob: {f_prob[sorted_f_ids[:3]]}" )
 
         expend_ids = sorted_f_ids[0:self.b_exp]
         keep_ids = sorted_f_ids[self.b_exp:(self.b_exp + self.b_keep)]
@@ -155,6 +167,17 @@ class AStarVector:
             self.n_gens * n_states
         ) # (N_STATES * N_GENS) == [G1+1, G1+1, G1+1, ..., GN+1, GN+1, GN+1]
 
+        ###########
+        
+        s_hashes = self.get_hashes(s_expended)
+        hashed_sorted, hashed_idx = torch.sort(s_hashes)
+        unique_hahes_mask_2 = torch.cat((torch.tensor([True], device=self.device), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
+        hashed_idx = hashed_idx[unique_hahes_mask_2]
+        
+        s_expended = s_expended[hashed_idx]
+        g_expend = g_expend[hashed_idx]
+        expanded_actions = expanded_actions[hashed_idx]
+
         ############
 
         solution_depth = solutions_expend.shape[1]
@@ -166,6 +189,8 @@ class AStarVector:
             self.n_gens * n_states,
             solution_depth
         ).to(self.device) # (N_STATES * N_GENS, SOLUTION_LEN) == [SOLUTION(S1), SOLUTION(S1), ..., SOLUTION(SN), SOLUTION(SN)]
+        
+        solutions_expend = solutions_expend[hashed_idx, :] # ????
 
         solutions_expend = torch.cat([solutions_expend, expanded_actions.unsqueeze(dim=1)], dim=1)        
 
@@ -197,21 +222,12 @@ class AStarVector:
 
         self.states = torch.cat([s_expended, s_keep], dim=0)
 
-        state_hashes = self.get_hashes(self.states)
-        hashed_sorted, hashed_idx = torch.sort(state_hashes)
-        unique_hahes_mask_2 = torch.cat((torch.tensor([True], device=self.device), hashed_sorted[1:] - hashed_sorted[:-1] > 0))
-        hashed_idx = hashed_idx[unique_hahes_mask_2]
-
-        self.h = self.h[hashed_idx]
-        self.g = self.g[hashed_idx]
-        self.states = self.states[hashed_idx]
-        self.solutions[hashed_idx] = self.solutions[hashed_idx]
-
-        print(f"{self.global_i}) g_min: {torch.min(self.g)}; g_max: {torch.max(self.g)}; g_size: {self.g.shape[0]}")
-        print(f"{self.global_i}) h_min: {np.round(torch.min(self.h).item(), 3)}; h_max: {np.round(torch.max(self.h).item(), 3)}; h_size: {np.round(self.h.shape[0], 3)}")
+        if self.verbose:
+            print(f"{self.global_i}) g_mean: {np.round( torch.mean(self.g).item(),3)}; h_mean: {np.round( torch.mean(self.h).item(),3)}")
+            # print(f"{self.global_i}) g_min: {torch.min(self.g)}; g_max: {torch.max(self.g)}; g_mean: {np.round(torch.mean(self.g).item(), 3)};, g_size: {self.g.shape[0]}")
+            # print(f"{self.global_i}) h_min: {np.round(torch.min(self.h).item(), 3)}; h_max: {np.round(torch.max(self.h).item(), 3)}; h_mean: {np.round(torch.mean(self.h).item(), 3)}; h_size: {np.round(self.h.shape[0], 3)}")
 
         pass
-
 
     def search(
         self,
@@ -239,7 +255,7 @@ class AStarVector:
             search_result = (self.states == self.goal_state).all(dim=1).nonzero(as_tuple=True)[0]
             
             if (len(search_result) > 0):
-                print("Found!", search_result)
+                # print("Found!", search_result)
                 # for i in range(len(search_result)):
                 #     solution_index = search_result[i].item()
                 #     solution = self.solutions[solution_index, :]
@@ -253,8 +269,9 @@ class AStarVector:
             self.global_i += 1            
 
         return [], self.processed_count
-
-if __name__ == "__main__": 
+    
+def test_a_star():
+    set_seed(0)
     deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
     game = Cube3Game("./assets/envs/qtm_cube3.pickle")
     generators = torch.tensor(game.actions, dtype=torch.int64)
@@ -278,27 +295,109 @@ if __name__ == "__main__":
     goal_state = torch.arange(0, 54, dtype=torch.int64)
 
     our_lens = []
-    for i in tqdm(range(1, 2)):
-        with TimeContext(f"{i}] Execution time:", True):
+    for i in tqdm(range(0, 10)):
+        with TimeContext(f"{i}] Execution time:", True):            
+            state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64)#.unsqueeze(0)
+
+            state = state.unsqueeze(0)
+
             path_finder = AStarVector(
                 model=model,
                 generators=generators,
                 num_steps=10_000,
-                b_exp = 10_000,
-                b_keep = 10_000,
-                alpha=1.0,
+                b_exp=4096,
+                b_keep=0,
+                temperature=0.3,
                 goal_state=goal_state,
                 verbose=True,
                 device=device,
                 model_device=model_device
             )
-
-            state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64).unsqueeze(0)        
+            
+            opt_solution = deepcube_test['solutions'][i]
 
             solution, processed_count = path_finder.search(state)
             our_lens.append(len(solution))
 
-            print("solution len:", len(solution))
-            print("mean len:", np.mean(our_lens))
-            # print("solution:", solution)
-            print("processed_count:", int_to_human(processed_count))
+            print(f"{i}] optimum_len:", len(opt_solution))
+            print(f"{i}] solution len:", len(solution))
+            print(f"{i}] mean len:", np.round(np.mean(our_lens), 3))
+            print(f"{i}] solution:", solution)
+            print(f"{i}] processed_count:", int_to_human(processed_count))
+
+def sample_solutions():
+    deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
+    game = Cube3Game("./assets/envs/qtm_cube3.pickle")
+    generators = torch.tensor(game.actions, dtype=torch.int64)
+
+    device = "cpu"
+    model_device = "cpu"
+
+    model = Pilgrim(
+        input_dim = 54, 
+        hidden_dim1 = 5000, 
+        hidden_dim2 = 1000, 
+        num_residual_blocks = 4 
+    ) # ~14M
+
+    model.load_state_dict(
+        torch.load(
+            "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
+            map_location=model_device)
+    )
+    model = model.to(model_device)
+    goal_state = torch.arange(0, 54, dtype=torch.int64)
+    
+    path = []
+    while True:
+        n_stats = []
+        for n in range(len(generators)):
+            lens = []
+            for seed in range(10):
+                set_seed(seed + 10 * n)
+                state = torch.tensor(deepcube_test['states'][1], dtype=torch.int64)#.unsqueeze(0)            
+                for a in path:
+                    state = state[generators[a]]
+                
+                is_goal = (state == goal_state).all().item()
+                if is_goal:
+                    print(f"Len:", len(path))
+                    print(f"Path: {path}")
+                    return
+                
+                state = state[generators[n]]
+                state = state.unsqueeze(0)
+
+                path_finder = AStarVector(
+                    model=model,
+                    generators=generators,
+                    num_steps=10_000,
+                    b_exp=100,
+                    b_keep=100,
+                    temperature=1e-1,
+                    goal_state=goal_state,
+                    verbose=False,
+                    device=device,
+                    model_device=model_device
+                )
+                
+                solution, _ = path_finder.search(state)
+                if len(solution) == 1:
+                    path.append(n)
+                    print("Solution:", solution)
+                    print(f"Len:", len(path))
+                    print(f"Path: {path}")
+                    
+                    return
+                
+                lens.append(len(solution))        
+            # print(f"n: {n}; mean: {np.mean(lens)}")
+            n_stats.append(np.mean(lens))
+        
+        action = np.argsort(n_stats)[0]
+        print("Element of path!: ", action)
+        path.append(action)
+
+if __name__ == "__main__": 
+    test_a_star()
+    # sample_solutions()
