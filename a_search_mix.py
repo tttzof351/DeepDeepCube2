@@ -458,9 +458,71 @@ def find_best_temperature():
         best_mean = mean_lens[best_id]
         print(f"b={b}; means={mean_lens}; best_mean={best_mean}, best_t={best_t}")
 
+def find_best_keep():
+    set_seed(0)
+    deepcube_test = open_pickle("./assets/data/deepcubea/data_0.pkl")
+    game = Cube3Game("./assets/envs/qtm_cube3.pickle")
+    generators = torch.tensor(game.actions, dtype=torch.int64)
+
+    device = "cpu"
+    model_device = "cpu"
+
+    model = Pilgrim(
+        input_dim = 54, 
+        hidden_dim1 = 5000, 
+        hidden_dim2 = 1000, 
+        num_residual_blocks = 4 
+    ) # ~14M
+
+    model.load_state_dict(
+        torch.load(
+            "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
+            map_location=model_device)
+    )
+    model = model.to(model_device)
+    goal_state = torch.arange(0, 54, dtype=torch.int64)
+
+    B_KEEP = [0, 12, 120, 1200, 12000]
+    B_EXP = [4096]
+
+    for b in B_EXP:
+        mean_lens = []
+        for b_keep in B_KEEP:
+            our_lens = []
+            b_exp = b -int(b_keep / 12)
+            with TimeContext(f"b_exp={b_exp}; b_keep={b_keep}] Execution time:", True):
+                for i in tqdm(range(0, 10)):
+                    state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64)#.unsqueeze(0)
+
+                    state = state.unsqueeze(0)
+
+                    path_finder = AStarVector(
+                        model=model,
+                        generators=generators,
+                        num_steps=10_000,
+                        b_exp=b_exp,
+                        b_keep=b_keep,
+                        temperature=0.0,
+                        goal_state=goal_state,
+                        verbose=False,
+                        device=device,
+                        model_device=model_device
+                    )
+                    
+                    # opt_solution = deepcube_test['solutions'][i]
+
+                    solution, processed_count = path_finder.search(state)
+                    our_lens.append(len(solution))        
+            mean_lens.append(np.round(np.mean(our_lens), 4))
+        best_id = np.argsort(mean_lens)[0]
+        best_b_keep = B_KEEP[best_id]
+        best_b_exp = b - int(best_b_keep / 12)
+        best_mean = mean_lens[best_id]
+        print(f"b={b}; means={mean_lens}; best_mean={best_mean}, best_b_exp={best_b_exp}; best_b_keep={best_b_keep}")
 
 
 if __name__ == "__main__": 
     # test_a_star()
     # sample_solutions()
-    find_best_temperature()
+    # find_best_temperature()
+    find_best_keep()
