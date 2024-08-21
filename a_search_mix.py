@@ -208,7 +208,8 @@ class AStarVector:
 
         ############
 
-        print(f"{self.global_i}) predict for: ", s_expended.shape[0])
+        if self.verbose :
+            print(f"{self.global_i}) predict for: ", s_expended.shape[0])
         h_expended, _ = self.predict(s_expended)
 
         ############
