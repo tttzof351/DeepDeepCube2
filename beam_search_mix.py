@@ -200,6 +200,7 @@ class BeamSearchMix:
                 # neighbours_hashes = neighbours_hashes[policy_scores_idx]
         
         with TimeContext(f"{self.global_i}) Inference", self.verbose):
+            print(f"{self.global_i}) predict for: ", neighbours_states.shape[0])
             v, p = self.predict(neighbours_states) # (N_STATES)    
         
         if self.value_beam_width is not None:
@@ -263,7 +264,6 @@ class BeamSearchMix:
         ########################################################
 
         # self.policy = torch.zeros((1)) # (N_STATES) - one probability for one state
-        
         v, p = self.predict(self.states)  
         
         self.value = v # (N_STATES) - one value for one state
@@ -453,13 +453,26 @@ if __name__ == "__main__":
     #     model_device = "mps"
     # )
 
-    model = PilgrimMLP2()
+    # model = PilgrimMLP2()
     
+    # model.load_state_dict(
+    #     torch.load(
+    #         "./assets/models/mlp2_value.pt",
+    #         map_location=torch.device('cpu')
+    #     )
+    # )
+
+    model = Pilgrim(
+        input_dim = 54, 
+        hidden_dim1 = 5000, 
+        hidden_dim2 = 1000, 
+        num_residual_blocks = 4 
+    ) # ~14M
+
     model.load_state_dict(
         torch.load(
-            "./assets/models/mlp2_value.pt",
-            map_location=torch.device('cpu')
-        )
+            "./assets/models/Cube3ResnetModel_value_policy_3_8B_14M.pt",
+            map_location="cpu")
     )
 
     process_deepcube_dataset(
@@ -469,7 +482,7 @@ if __name__ == "__main__":
         search_mode = "value",
         start_cube = 0,
         end_cubes = 1,
-        verbose = True,
+        verbose = False,
         model_device = "mps",
         is_state_dict_model=False
     )        

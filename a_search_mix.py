@@ -208,6 +208,7 @@ class AStarVector:
 
         ############
 
+        print(f"{self.global_i}) predict for: ", s_expended.shape[0])
         h_expended, _ = self.predict(s_expended)
 
         ############
@@ -222,8 +223,8 @@ class AStarVector:
 
         self.states = torch.cat([s_expended, s_keep], dim=0)
 
-        if self.verbose:
-            print(f"{self.global_i}) g_mean: {np.round( torch.mean(self.g).item(),3)}; h_mean: {np.round( torch.mean(self.h).item(),3)}")
+        # if self.verbose:
+            # print(f"{self.global_i}) g_mean: {np.round( torch.mean(self.g).item(),3)}; h_mean: {np.round( torch.mean(self.h).item(),3)}")
             # print(f"{self.global_i}) g_min: {torch.min(self.g)}; g_max: {torch.max(self.g)}; g_mean: {np.round(torch.mean(self.g).item(), 3)};, g_size: {self.g.shape[0]}")
             # print(f"{self.global_i}) h_min: {np.round(torch.min(self.h).item(), 3)}; h_max: {np.round(torch.max(self.h).item(), 3)}; h_mean: {np.round(torch.mean(self.h).item(), 3)}; h_size: {np.round(self.h.shape[0], 3)}")
 
@@ -277,7 +278,7 @@ def test_a_star():
     generators = torch.tensor(game.actions, dtype=torch.int64)
 
     device = "cpu"
-    model_device = "cpu"
+    model_device = "mps"
 
     model = Pilgrim(
         input_dim = 54, 
@@ -295,7 +296,7 @@ def test_a_star():
     goal_state = torch.arange(0, 54, dtype=torch.int64)
 
     our_lens = []
-    for i in tqdm(range(0, 10)):
+    for i in tqdm(range(0, 1)):
         with TimeContext(f"{i}] Execution time:", True):            
             state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64)#.unsqueeze(0)
 
@@ -305,9 +306,9 @@ def test_a_star():
                 model=model,
                 generators=generators,
                 num_steps=10_000,
-                b_exp=4096,
-                b_keep=0,
-                temperature=0.3,
+                b_exp=150_000,
+                b_keep=50_000,
+                temperature=0.0,
                 goal_state=goal_state,
                 verbose=True,
                 device=device,
@@ -465,7 +466,7 @@ def find_best_keep():
     generators = torch.tensor(game.actions, dtype=torch.int64)
 
     device = "cpu"
-    model_device = "cpu"
+    model_device = "mps"
 
     model = Pilgrim(
         input_dim = 54, 
@@ -482,8 +483,17 @@ def find_best_keep():
     model = model.to(model_device)
     goal_state = torch.arange(0, 54, dtype=torch.int64)
 
-    B_KEEP = [0, 12, 120, 1200, 12000]
-    B_EXP = [4096]
+    # B_KEEP = [0, 12, 120, 1200, 12000]
+    # B_EXP = [4096]
+
+    # B_KEEP = [0, 12, 120, 1200, 12000]
+    # B_EXP = [2048, 4096, 8192]
+
+    # B_KEEP = [0]
+    # B_EXP = [4096]
+
+    B_KEEP = [4096]
+    B_EXP = [20]
 
     for b in B_EXP:
         mean_lens = []
@@ -491,7 +501,7 @@ def find_best_keep():
             our_lens = []
             b_exp = b -int(b_keep / 12)
             with TimeContext(f"b_exp={b_exp}; b_keep={b_keep}] Execution time:", True):
-                for i in tqdm(range(0, 10)):
+                for i in tqdm(range(0, 100)):
                     state = torch.tensor(deepcube_test['states'][i], dtype=torch.int64)#.unsqueeze(0)
 
                     state = state.unsqueeze(0)
@@ -522,7 +532,7 @@ def find_best_keep():
 
 
 if __name__ == "__main__": 
-    # test_a_star()
+    test_a_star()
     # sample_solutions()
     # find_best_temperature()
-    find_best_keep()
+    # find_best_keep()
