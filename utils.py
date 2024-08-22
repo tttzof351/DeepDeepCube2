@@ -5,17 +5,11 @@ import time
 import torch
 import numpy as np
 import random
-import wyhash
 from numba import njit
 import pickle
 import time
 
 from catboost import CatBoostRegressor
-
-sec = wyhash.make_secret(0)
-
-def array_wyhash(array: np.array):
-    return wyhash.hash(array.tobytes(), 0, sec)
 
 def set_seed(seed: int):
     random.seed(seed)

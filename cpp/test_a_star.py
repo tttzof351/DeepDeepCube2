@@ -67,6 +67,6 @@ deepcube_test = open_pickle("../assets/data/deepcubea/data_0.pkl")
 # print("Result h_values: ", [np.round(h, 3) for h in result.h_values])
 # print("Result visit_nodes: ", result.visit_nodes)
 
-# # cpp_a_star.run_openmp_test()
+cpp_a_star.run_openmp_test()
 
-cpp_a_star.benchmark_catboost_inference()
+# cpp_a_star.benchmark_catboost_inference()
