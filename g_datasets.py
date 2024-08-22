@@ -10,7 +10,6 @@ from typing import Dict,Tuple,Optional,List
 
 from hyperparams import hp
 from cube3_game import Cube3Game
-from utils import array_wyhash
 from utils import set_seed
 
 @torch.jit.script

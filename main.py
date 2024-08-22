@@ -12,7 +12,7 @@ from sklearn.metrics import r2_score
 from sklearn.metrics import root_mean_squared_error
 from numba import njit
 
-from utils import array_wyhash, set_seed
+from utils import set_seed
 from utils import open_pickle, save_pickle
 
 from cube3_game import Cube3Game
