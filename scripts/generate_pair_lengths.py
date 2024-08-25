@@ -45,7 +45,7 @@ if __name__ == "__main__":
         "lengths": lengths.detach().numpy()
     }, "../assets/lengths/scrambles_dict.pkl")
 
-    model_device = "mps"
+    model_device = "cuda"
     model = Pilgrim(
         input_dim = 54, 
         hidden_dim1 = 5000, 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
             goal_state=goal_state,
             verbose=False,
             device="cpu",
-            model_device="mps"
+            model_device=model_device
         )
 
         solution, processed_count = path_finder.search(scramble.unsqueeze(0))
