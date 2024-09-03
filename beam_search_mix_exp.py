@@ -26,6 +26,8 @@ class BeamSearchMixExp:
         value_beam_width: int,
         policy_beam_width: int,
         alpha: float,
+        T: float,
+        B: int,
         generators: torch.Tensor,
         goal_state: torch.Tensor,
         verbose: bool,
@@ -43,6 +45,8 @@ class BeamSearchMixExp:
         self.value_beam_width = value_beam_width
         self.policy_beam_width = policy_beam_width
         self.alpha = alpha
+        self.T = T  
+        self.B = B
         self.generators = generators.to(self.device)
         self.n_gens = generators.size(0)
         self.state_size = generators.size(1)
@@ -203,19 +207,19 @@ class BeamSearchMixExp:
         
         if self.value_beam_width is not None:
             with TimeContext(f"{self.global_i}) Value+Policy filter", self.verbose):                
-                B = 2048
+                # B = 2048
 
-                if self.global_i < 5:
-                    B = 20_000
-                elif self.global_i < 10:
-                    B = 100_000
-                elif self.global_i < 15:
-                    B = 200_000
-                else:
-                    B = 50_000
+                # if self.global_i < 5:
+                #     B = 20_000
+                # elif self.global_i < 10:
+                #     B = 100_000
+                # elif self.global_i < 15:
+                #     B = 200_000
+                # else:
+                #     B = 50_000
                 
                 # B = int(B / 10)
-                B = 10_000
+                # B = 4
 
                 v_min = torch.min(v)
                 policy_score_max = torch.max(policy_scores)
@@ -232,15 +236,14 @@ class BeamSearchMixExp:
                 #     dim=0
                 # )
                 # v_policy_idx = value_policy_score.multinomial(num_samples=B, replacement=True)#[:B]
-
                 value_policy_score = torch.softmax(
                     #torch.softmax(-v, dim=0) + torch.softmax(+policy_scores, dim=0) * 0.0,
-                    -v + policy_scores * 0.0,
+                    (-v * 0.0 + policy_scores * 1.0) / self.T,
                     # policy_scores,
                     # -v,
                     dim=0
                 )
-                v_policy_idx = value_policy_score.multinomial(num_samples=B, replacement=True)#[:B]
+                v_policy_idx = value_policy_score.multinomial(num_samples=min(self.B, value_policy_score.shape[0]), replacement=True)#[:B]
 
 
                 expanded_actions = expanded_actions[v_policy_idx] # (N_GENS * STATE_SIZE) == [A1, A2, ..., A1, A2]
@@ -399,7 +402,9 @@ def process_deepcube_dataset(
             num_steps=1000,
             policy_beam_width=-1,
             value_beam_width=-1,
-            alpha=0.9,
+            alpha=0.7,
+            T=0.95,
+            B=4,
             goal_state=goal_state,
             verbose=verbose,
             device=device,
@@ -411,11 +416,17 @@ def process_deepcube_dataset(
 
         duration = np.round(end - start, 3)
 
+        if solution is None:
+            solution = torch.tensor([], dtype=torch.int64, device=device)
+            solution_len = -1
+        else:
+            solution_len = len(solution)
+
         record = {
             "i": i,
             "state": deepcube_test['states'][i],
             "duration_sec": duration,
-            "solution_len": len(solution),            
+            "solution_len": solution_len,            
             "solution": solution.detach().tolist(),
             "optimum_len": len(opt_solution),            
             "optimum": opt_solution,
@@ -423,16 +434,21 @@ def process_deepcube_dataset(
         }
 
         print(f"{i}] state:", state.shape)
-        print(f"{i}] optimum_len:", len(opt_solution))
+        # print(f"{i}] optimum_len:", len(opt_solution))
 
-        print(f"{i}] solution_len:", len(solution), "path:", solution)
-        our_lens.append(len(solution))
+        # print(f"{i}] solution_len:", len(solution), "path:", solution)
+        print(f"{i}] solution_len:", solution_len)
+        our_lens.append(solution_len)
         count_millions = np.round(processed_count / 10**6, 3)
         print(f"{i}] processed_count: {count_millions}M")
         print(f"{i}] duration: {duration} sec")
+        print(f"{i}] our_lens:", our_lens)
         
-        print(f"{i}] optimum mean:", np.round(np.mean(optimal_lens), 4))
-        print(f"{i}] our mean:", np.round(np.mean(our_lens), 4))
+        count_not_equal_minus_one = sum(1 for length in our_lens if length != -1)
+        print(f"{i}] found soultions: {count_not_equal_minus_one}")
+        
+        # print(f"{i}] optimum mean:", np.round(np.mean(optimal_lens), 4))
+        # print(f"{i}] our mean:", np.round(np.mean(our_lens), 4))
 
         report.append(record)
 
@@ -492,10 +508,10 @@ if __name__ == "__main__":
     process_deepcube_dataset(
         report_path=None,
         model_path = "./assets/models/pruning_finetune_Cube3ResnetModel_value_policy_3_8B_14M.pt",
-        search_mode = "value",
+        search_mode = "policy",
         start_cube = 0,
-        end_cubes = 10,
-        verbose = True,
+        end_cubes = 100,
+        verbose = False,
         model_device = "mps",
         is_state_dict_model=False
     )        

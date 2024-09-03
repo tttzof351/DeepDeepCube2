@@ -1,0 +1,17 @@
+{
+  "id": "tttzof351/notebook-kaggle-api",
+  "id_no": 64757630,
+  "title": "notebook_kaggle_api",
+  "code_file": "notebook-kaggle-api.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}
