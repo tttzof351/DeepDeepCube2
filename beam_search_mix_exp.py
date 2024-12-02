@@ -10,7 +10,7 @@ from contextlib import nullcontext
 from utils import open_pickle
 
 from cube3_game import Cube3Game
-from models import Pilgrim
+from models import Pilgrim, count_parameters
 from g_datasets import get_torch_scrambles_3
 from utils import set_seed
 from utils import save_pickle
@@ -382,7 +382,7 @@ def process_deepcube_dataset(
     else:
         model = torch.load(model_path, map_location=model_device)
         model = model.to(model_device)
-        # print(model)
+        print("Model params:", int_to_human(count_parameters(model)))
 
     optimal_lens = []
     our_lens = []
@@ -404,7 +404,7 @@ def process_deepcube_dataset(
             value_beam_width=-1,
             alpha=0.7,
             T=0.95,
-            B=4,
+            B=128,
             goal_state=goal_state,
             verbose=verbose,
             device=device,

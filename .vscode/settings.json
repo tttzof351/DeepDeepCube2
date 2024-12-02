@@ -14,5 +14,6 @@
         "queue": "cpp",
         "set": "cpp",
         "unordered_map": "cpp"
-    }
+    },
+    "zencoder.enableRepoIndexing": true
 }
